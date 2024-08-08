@@ -1,8 +1,9 @@
+from typing import List
 import requests
 import discord
 from datetime import datetime
 from discord.ext import commands
-from table2ascii import table2ascii, PresetStyle, Alignment
+from table2ascii import table2ascii, TableStyle, Alignment
 import configparser
 
 # Read the settings.cfg file
@@ -24,7 +25,6 @@ def get_tasks(api_token, label_name):
     headers = {
         'Authorization': f'Bearer {api_token}'
     }
-    today = datetime.now().strftime('%Y-%m-%d')
 
     # Get all tasks
     params = {
@@ -93,6 +93,18 @@ async def on_ready():
     print(f'Bot is ready. Logged in as {bot.user}')
     await fetch_and_send_tasks()
 
+async def paginate_message_send(channel: int, message_content: List[str], max_page: int=2000):
+    page_start = 0
+    page_length = 0
+    for line, content in enumerate(message_content):
+        if len(content) + page_length > 2000:
+            await channel.send("\n".join(message_content[page_start:line]))
+            page_start = line
+            page_length = 0
+
+        page_length += len(content) + 1 # add newline char
+    
+    await channel.send("\n".join(message_content[page_start:]))
 
 async def fetch_and_send_tasks():
     label_name = 'exclude'  # Replace with your desired label
@@ -102,8 +114,7 @@ async def fetch_and_send_tasks():
         print('Channel not found')
         return
 
-    embed = discord.Embed(title="Daily Task Check", description="Readout of task status", color=0xFF5733)
-    message_content = []
+    message_content = ["**Daily Task Readout**"]
 
     for discord_id, api_token in USER_API_TOKENS.items():
         tasks = get_tasks(api_token, label_name)
@@ -111,25 +122,31 @@ async def fetch_and_send_tasks():
         discord_user = await bot.fetch_user(discord_id)
 
         if tasks:
-            message_content.append(f"Tasks for {discord_user.mention}")
+            message_content.append(f"*Tasks for {discord_user.mention}*")
             table = table2ascii(
                 header=["Task", "Due"],
                 body=[[task['content'], task['due']['string']] for task in tasks],
-                style=PresetStyle.thin_compact,
-                alignments=Alignment.LEFT
+                style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
+                alignments=Alignment.LEFT,
+                column_widths=[70, 20]
             )
             message_content.append(f"```\n{table}\n```")
         else:
             message_content.append(f"{discord_user.mention} Completed all tasks")
 
-    embed.add_field(
-        name="Tasks",
-        value="\n".join(message_content),
-        inline=False
-    )
-    embed.set_footer(text="Shame all users who failed to finish their tasks")
 
-    await channel.send(embed=embed)
+
+    await paginate_message_send(channel, message_content)
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    thread_message = await channel.send("Discuss Task Completion in following Thread:")
+
+    await channel.create_thread(
+        name=f"Daily Task Thread {today}",
+        message=thread_message,
+        reason="Daily Task Thread",
+    )
     await bot.close()
 
 
