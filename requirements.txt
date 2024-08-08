@@ -1,0 +1,4 @@
+ruff
+discord
+table2ascii
+requests
