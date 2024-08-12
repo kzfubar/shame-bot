@@ -96,7 +96,7 @@ def add_user_info_to_config(user_email, access_token):
     if 'TODOIST_KEY_BY_EMAIL' not in config:
         config['TODOIST_KEY_BY_EMAIL'] = {}
 
-    config['TODOIST_KEY_BY_TODOIST_ID'][user_email] = access_token
+    config['TODOIST_KEY_BY_EMAIL'][user_email] = access_token
 
     with open('settings.cfg', 'w') as configfile:
         config.write(configfile)
@@ -104,9 +104,9 @@ def add_user_info_to_config(user_email, access_token):
 
 def get_auth_token(user_id):
     # Check if the user ID exists in the config
-    if str(user_id) in config['TODOIST_KEY_BY_TODOIST_ID']:
+    if str(user_id) in config['TODOIST_KEY_BY_EMAIL']:
         print(user_id)
-        return config['TODOIST_KEY_BY_TODOIST_ID'][str(user_id)]
+        return config['TODOIST_KEY_BY_EMAIL'][str(user_id)]
     else:
         # Redirect to the Todoist OAuth authorization page
         return
@@ -114,7 +114,7 @@ def get_auth_token(user_id):
 
 def get_todoist_token(user_id):
     # Retrieve the token using the user_id from the appropriate section
-    token = config['TODOIST_KEY_BY_TODOIST_ID'].get(user_id)
+    token = config['TODOIST_KEY_BY_EMAIL'].get(user_id)
     if not token:
         raise ValueError(f"No token found for user_id: {user_id}")
 
