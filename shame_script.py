@@ -13,12 +13,11 @@ config_path = os.path.join(os.path.dirname(__file__), 'settings.cfg')
 config = configparser.ConfigParser()
 config.read(config_path)
 
-# Load the USER_API_TOKENS from the config file
-USER_API_TOKENS = dict(config.items("USER_API_TOKENS"))
-
 # Load the Discord bot token and channel ID from the config file
 DISCORD_TOKEN = config.get("DISCORD", "TOKEN")
 CHANNEL_ID = config.getint("DISCORD", "CHANNEL_ID")
+SERVER_ID = config.getint("DISCORD", "SERVER_ID")
+LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
@@ -92,14 +91,56 @@ def add_label(tasks, api_token, label_name):
 # Initialize the bot
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(intents=intents, command_prefix="!")
 
 
 @bot.event
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user}")
+    await fetch_emails()
     await fetch_and_send_tasks()
 
+
+async def fetch_emails():
+    guild = bot.get_guild(SERVER_ID)  # Fetch the server (guild) by its ID
+    last_online_dt = datetime.strptime(LAST_ONLINE, "%Y-%m-%d %H:%M:%S") if LAST_ONLINE else None
+
+    for member in guild.members:
+        if member.bot:
+            continue  # Skip bots
+
+        user = member
+        if user.dm_channel is None:
+            await user.create_dm()
+
+        dm_channel = user.dm_channel
+
+        # Fetch DMs since the bot was last online
+        recent_messages = []
+        if last_online_dt:
+            async for message in dm_channel.history(after=last_online_dt):
+                if message.author != bot.user:
+                    recent_messages.append(message)
+        else:
+            # Fetch a few recent messages if the bot is running for the first time
+            async for message in dm_channel.history(limit=1):
+                if message.author != bot.user:
+                    recent_messages.append(message)
+
+        if recent_messages:
+            last_message = recent_messages[-1]
+            email = last_message.content.strip()
+            config.set("DISCORD_ID_BY_EMAIL", email, str(user.id))
+            with open(config_path, "w") as configfile:
+                config.write(configfile)
+            print(f"Added {email} to DISCORD_ID_BY_EMAIL.")
+
+    # Update the last online timestamp
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    config.set("DISCORD", "LAST_ONLINE", now)
+    with open(config_path, "w") as configfile:
+        config.write(configfile)
 
 async def paginate_message_send(
         channel: int, message_content: List[str], max_page: int = 2000
@@ -126,8 +167,11 @@ async def fetch_and_send_tasks():
         return
 
     message_content = ["**Daily Task Readout**"]
-
-    for discord_id, api_token in USER_API_TOKENS.items():
+    # Load keys from the config file
+    todoist_key_by_email = dict(config.items("TODOIST_KEY_BY_EMAIL"))
+    discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
+    for user_email, api_token in todoist_key_by_email.items():
+        discord_id = int(discord_id_by_email[user_email])
         tasks = get_tasks(api_token, label_name)
         add_label(tasks, api_token, "shame")
         discord_user = await bot.fetch_user(discord_id)
