@@ -102,7 +102,7 @@ def add_user_info_to_config(user_id, user_email, access_token):
         config['EMAIL_BY_TODOIST_ID'] = {}
     config['EMAIL_BY_TODOIST_ID'][user_id] = user_email
 
-    with open('settings.cfg', 'w') as configfile:
+    with open(config_path, 'w') as configfile:
         config.write(configfile)
 
 
