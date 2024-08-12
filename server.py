@@ -45,9 +45,9 @@ def webhook():
 def auth():
     code = request.args.get('code')
     access_token = exchange_code_for_token(code)
-    user_email = get_user_info_from_todoist(access_token)
-    if user_email:
-        add_user_info_to_config(user_email, access_token)
+    user_id, user_email = get_user_info_from_todoist(access_token)
+    if user_id and user_email:
+        add_user_info_to_config(user_id, user_email, access_token)
     return 'Success', 200
 
 
@@ -85,18 +85,22 @@ def get_user_info_from_todoist(access_token):
     if response.status_code == 200:
         response_json = response.json()
         user_info = response_json.get('user', {})
+        user_id = user_info.get('id')
         user_email = user_info.get('email')
-        return user_email
+        return user_id, user_email
     else:
         print(f"Failed to fetch user info: {response.status_code} - {response.text}")
-        return None
+        return None, None
 
 
-def add_user_info_to_config(user_email, access_token):
+def add_user_info_to_config(user_id, user_email, access_token):
     if 'TODOIST_KEY_BY_EMAIL' not in config:
         config['TODOIST_KEY_BY_EMAIL'] = {}
-
     config['TODOIST_KEY_BY_EMAIL'][user_email] = access_token
+
+    if 'EMAIL_BY_TODOIST_ID' not in config:
+        config['EMAIL_BY_TODOIST_ID'] = {}
+    config['EMAIL_BY_TODOIST_ID'][user_id] = user_email
 
     with open('settings.cfg', 'w') as configfile:
         config.write(configfile)
@@ -104,9 +108,9 @@ def add_user_info_to_config(user_email, access_token):
 
 def get_auth_token(user_id):
     # Check if the user ID exists in the config
-    if str(user_id) in config['TODOIST_KEY_BY_EMAIL']:
-        print(user_id)
-        return config['TODOIST_KEY_BY_EMAIL'][str(user_id)]
+    if str(user_id) in config['EMAIL_BY_TODOIST_ID']:
+        user_email = config['EMAIL_BY_TODOIST_ID'][str(user_id)]
+        return config['TODOIST_KEY_BY_EMAIL'][str(user_email)]
     else:
         # Redirect to the Todoist OAuth authorization page
         return
