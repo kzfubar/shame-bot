@@ -1,14 +1,17 @@
-from typing import List
-import requests
-import discord
+import configparser
+import os
 from datetime import datetime
+from typing import List
+
+import discord
+import requests
 from discord.ext import commands
 from table2ascii import table2ascii, TableStyle, Alignment
-import configparser
 
 # Read the settings.cfg file
+config_path = os.path.join(os.path.dirname(__file__), 'settings.cfg')
 config = configparser.ConfigParser()
-config.read("settings.cfg")
+config.read(config_path)
 
 # Load the USER_API_TOKENS from the config file
 USER_API_TOKENS = dict(config.items("USER_API_TOKENS"))
@@ -99,7 +102,7 @@ async def on_ready():
 
 
 async def paginate_message_send(
-    channel: int, message_content: List[str], max_page: int = 2000
+        channel: int, message_content: List[str], max_page: int = 2000
 ):
     page_start = 0
     page_length = 0
