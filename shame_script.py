@@ -21,6 +21,9 @@ LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
+TASK_MAX_LENGTH = 70
+INTERVAL_MAX_LENGTH = 20
+
 
 # Function to get all tasks with a specific label and due today or overdue
 def get_tasks(api_token, label_name):
@@ -88,6 +91,15 @@ def add_label(tasks, api_token, label_name):
             )
 
 
+def string_shorten(message: str, max_length: int):
+    message = message.strip()
+
+    if len(message) <= max_length:
+        return message
+
+    return message[: max_length - 3] + "..."
+
+
 # Initialize the bot
 intents = discord.Intents.default()
 intents.message_content = True
@@ -151,7 +163,7 @@ async def paginate_message_send(
     page_start = 0
     page_length = 0
     for line, content in enumerate(message_content):
-        if len(content) + page_length > 2000:
+        if len(content) + page_length > max_page:
             await channel.send("\n".join(message_content[page_start:line]))
             page_start = line
             page_length = 0
@@ -183,10 +195,17 @@ async def fetch_and_send_tasks():
             message_content.append(f"*Tasks for {discord_user.mention}*")
             table = table2ascii(
                 header=["Task", "Due"],
-                body=[[task["content"], task["due"]["string"]] for task in tasks],
+                body=[
+                    [
+                        string_shorten(task["content"], TASK_MAX_LENGTH),
+                        string_shorten(task["due"]["string"], INTERVAL_MAX_LENGTH),
+                    ]
+                    for task in tasks
+                ],
                 style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
                 alignments=Alignment.LEFT,
-                column_widths=[70, 20],
+                # extra is added for the required padding
+                column_widths=[TASK_MAX_LENGTH + 2, INTERVAL_MAX_LENGTH + 2],
             )
             message_content.append(f"```\n{table}\n```")
         else:
