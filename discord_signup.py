@@ -62,9 +62,6 @@ async def on_ready():
 @bot.tree.command(name="signup")
 @discord.app_commands.describe(user_to_signup="Mention of user")
 async def signup(interaction: discord.Interaction, user_to_signup: discord.Member):
-    # The slash command gives a hint to the user about the mentions arg,
-    # but it isn't directly consumed in the function
-
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
 
