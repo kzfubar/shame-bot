@@ -9,7 +9,7 @@ from discord.ext import commands
 from table2ascii import table2ascii, TableStyle, Alignment
 
 # Read the settings.cfg file
-config_path = os.path.join(os.path.dirname(__file__), 'settings.cfg')
+config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
 config = configparser.ConfigParser()
 config.read(config_path)
 
@@ -104,7 +104,9 @@ async def on_ready():
 
 async def fetch_emails():
     guild = bot.get_guild(SERVER_ID)  # Fetch the server (guild) by its ID
-    last_online_dt = datetime.strptime(LAST_ONLINE, "%Y-%m-%d %H:%M:%S") if LAST_ONLINE else None
+    last_online_dt = (
+        datetime.strptime(LAST_ONLINE, "%Y-%m-%d %H:%M:%S") if LAST_ONLINE else None
+    )
 
     for member in guild.members:
         if member.bot:
@@ -142,8 +144,9 @@ async def fetch_emails():
     with open(config_path, "w") as configfile:
         config.write(configfile)
 
+
 async def paginate_message_send(
-        channel: int, message_content: List[str], max_page: int = 2000
+    channel: int, message_content: List[str], max_page: int = 2000
 ):
     page_start = 0
     page_length = 0
