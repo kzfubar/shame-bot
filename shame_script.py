@@ -163,7 +163,7 @@ async def paginate_message_send(
     page_start = 0
     page_length = 0
     for line, content in enumerate(message_content):
-        if len(content) + page_length > max_page:
+        if len(content) + 1 + page_length > max_page:
             await channel.send("\n".join(message_content[page_start:line]))
             page_start = line
             page_length = 0
