@@ -25,6 +25,12 @@ TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
 
 
+async def safe_send(channel: discord.TextChannel, message: str):
+    safe_message = message
+    if len(message) > 2000:
+        safe_message = message[:2000:]
+    await channel.send(safe_message)
+
 # Function to get all tasks with a specific label and due today or overdue
 def get_tasks(api_token, label_name):
     headers = {"Authorization": f"Bearer {api_token}"}
@@ -158,19 +164,20 @@ async def fetch_emails():
 
 
 async def paginate_message_send(
-    channel: int, message_content: List[str], max_page: int = 2000
+    channel: discord.TextChannel, message_content: List[str], max_page: int = 2000
 ):
     page_start = 0
     page_length = 0
     for line, content in enumerate(message_content):
         if len(content) + 1 + page_length > max_page:
-            await channel.send("\n".join(message_content[page_start:line]))
+            await safe_send(channel, "\n".join(message_content[page_start:line]))
             page_start = line
             page_length = 0
 
         page_length += len(content) + 1  # add newline char
 
-    await channel.send("\n".join(message_content[page_start:]))
+    print(message_content)
+    await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
 async def fetch_and_send_tasks():
@@ -215,7 +222,7 @@ async def fetch_and_send_tasks():
 
     today = datetime.now().strftime("%Y-%m-%d")
 
-    thread_message = await channel.send("Discuss Task Completion in following Thread:")
+    thread_message = await safe_send(channel, "Discuss Task Completion in following Thread:")
 
     await channel.create_thread(
         name=f"Daily Task Thread {today}",
