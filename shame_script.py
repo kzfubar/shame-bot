@@ -1,11 +1,12 @@
 import configparser
 import os
-from datetime import datetime
+from datetime import datetime, time
 from typing import List, Union
 
 import discord
 import requests
-from discord.ext import commands
+from discord.ext import commands, tasks
+from discord_signup import signup
 from table2ascii import table2ascii, TableStyle, Alignment
 
 # Read the settings.cfg file
@@ -20,6 +21,8 @@ SERVER_ID = config.getint("DISCORD", "SERVER_ID")
 LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
+
+SCHEDULED_POST_TIME = time(hour=14)
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
@@ -118,51 +121,9 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 @bot.event
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user}")
-    await fetch_emails()
-    await fetch_and_send_tasks()
-
-
-async def fetch_emails():
-    guild = bot.get_guild(SERVER_ID)  # Fetch the server (guild) by its ID
-    last_online_dt = (
-        datetime.strptime(LAST_ONLINE, "%Y-%m-%d %H:%M:%S") if LAST_ONLINE else None
-    )
-
-    for member in guild.members:
-        if member.bot:
-            continue  # Skip bots
-
-        user = member
-        if user.dm_channel is None:
-            await user.create_dm()
-
-        dm_channel = user.dm_channel
-
-        # Fetch DMs since the bot was last online
-        recent_messages = []
-        if last_online_dt:
-            async for message in dm_channel.history(after=last_online_dt):
-                if message.author != bot.user:
-                    recent_messages.append(message)
-        else:
-            # Fetch a few recent messages if the bot is running for the first time
-            async for message in dm_channel.history(limit=1):
-                if message.author != bot.user:
-                    recent_messages.append(message)
-
-        if recent_messages:
-            last_message = recent_messages[-1]
-            email = last_message.content.strip()
-            config.set("DISCORD_ID_BY_EMAIL", email, str(user.id))
-            with open(config_path, "w") as config_file:
-                config.write(config_file)
-            print(f"Added {email} to DISCORD_ID_BY_EMAIL.")
-
-    # Update the last online timestamp
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    config.set("DISCORD", "LAST_ONLINE", now)
-    with open(config_path, "w") as config_file:
-        config.write(config_file)
+    synced = await bot.tree.sync()
+    for command in synced:
+        print(command.name)
 
 
 async def paginate_message_send(
@@ -183,6 +144,7 @@ async def paginate_message_send(
     await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
+@tasks.loop(time=SCHEDULED_POST_TIME)
 async def fetch_and_send_tasks():
     label_name = "exclude"  # Replace with your desired label
 
@@ -248,7 +210,11 @@ async def fetch_and_send_tasks():
         message=thread_message,
         reason="Daily Task Thread",
     )
-    await bot.close()
+
+
+discord.app_commands.describe(
+    bot.tree.command(signup, name="signup"), user_to_signup="Mention of user"
+)
 
 
 # Run the bot

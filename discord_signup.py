@@ -52,15 +52,6 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
-@bot.event
-async def on_ready():
-    print("Bot is ready")
-    synced = await bot.tree.sync()
-    print(synced)
-
-
-@bot.tree.command(name="signup")
-@discord.app_commands.describe(user_to_signup="Mention of user")
 async def signup(interaction: discord.Interaction, user_to_signup: discord.Member):
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
