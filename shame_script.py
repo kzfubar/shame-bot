@@ -1,7 +1,7 @@
 import configparser
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Union
 
 import discord
 import requests
@@ -23,13 +23,14 @@ TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
+TASK_TABLE_LIMIT = 10
 
 
-async def safe_send(channel: discord.TextChannel, message: str):
+async def safe_send(channel: discord.TextChannel, message: str) -> discord.Message:
     safe_message = message
     if len(message) > 2000:
         safe_message = message[:2000:]
-    await channel.send(safe_message)
+    return await channel.send(safe_message)
 
 
 # Function to get all tasks with a specific label and due today or overdue
@@ -153,15 +154,15 @@ async def fetch_emails():
             last_message = recent_messages[-1]
             email = last_message.content.strip()
             config.set("DISCORD_ID_BY_EMAIL", email, str(user.id))
-            with open(config_path, "w") as configfile:
-                config.write(configfile)
+            with open(config_path, "w") as config_file:
+                config.write(config_file)
             print(f"Added {email} to DISCORD_ID_BY_EMAIL.")
 
     # Update the last online timestamp
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     config.set("DISCORD", "LAST_ONLINE", now)
-    with open(config_path, "w") as configfile:
-        config.write(configfile)
+    with open(config_path, "w") as config_file:
+        config.write(config_file)
 
 
 async def paginate_message_send(
@@ -196,18 +197,30 @@ async def fetch_and_send_tasks():
     discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
     for user_email, api_token in todoist_key_by_email.items():
         discord_id = int(discord_id_by_email[user_email])
-        tasks = get_tasks(api_token, label_name)
+        tasks: List[dict[str, Union[dict[str, str], str]]] = get_tasks(
+            api_token, label_name
+        )
         add_label(tasks, api_token, "shame")
         discord_user = await bot.fetch_user(discord_id)
 
         if tasks:
-            message_content.append(f"*Tasks for {discord_user.mention}*")
+            task_count = len(tasks)
+            if task_count > TASK_TABLE_LIMIT:
+                # subtract 1 from the task limit to leave room for the "more tasks" line
+                tasks = tasks[: TASK_TABLE_LIMIT - 1]
+                tasks.append(
+                    {
+                        "content": f"...{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)"
+                    }
+                )
             table = table2ascii(
                 header=["Task", "Due"],
                 body=[
                     [
-                        string_shorten(task["content"], TASK_MAX_LENGTH),
-                        string_shorten(task["due"]["string"], INTERVAL_MAX_LENGTH),
+                        string_shorten(task.get("content", ""), TASK_MAX_LENGTH),
+                        string_shorten(
+                            task.get("due", {}).get("string", ""), INTERVAL_MAX_LENGTH
+                        ),
                     ]
                     for task in tasks
                 ],
@@ -216,7 +229,9 @@ async def fetch_and_send_tasks():
                 # extra is added for the required padding
                 column_widths=[TASK_MAX_LENGTH + 2, INTERVAL_MAX_LENGTH + 2],
             )
-            message_content.append(f"```\n{table}\n```")
+            message_content.append(
+                f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
+            )
         else:
             message_content.append(f"{discord_user.mention} Completed all tasks")
 
