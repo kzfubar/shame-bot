@@ -43,38 +43,23 @@ except (configparser.NoSectionError, configparser.NoOptionError) as _:
     print("Todoist App link not set")
     exit()
 
-
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-bot = commands.Bot(intents=intents, command_prefix="!")
-
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
-@bot.event
-async def on_ready():
-    print("Bot is ready")
-    synced = await bot.tree.sync()
-    print(synced)
-
-
-@bot.tree.command(name="signup")
-@discord.app_commands.describe(user_to_signup="Mention of user")
-async def signup(interaction: discord.Interaction, user_to_signup: discord.Member):
+async def signup(
+    interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
+):
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
 
     if str(user_to_signup.id) in existing_users:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"User {user_to_signup.mention} already signed up"
         )
         return
 
-    await interaction.response.send_message(
-        f"Sent {user_to_signup.mention} dm to register"
-    )
-    await add_user(user_to_signup)
+    await interaction.followup.send(f"Sent {user_to_signup.mention} dm to register")
+    await add_user(user_to_signup, bot)
 
 
 def create_message_filter(
@@ -87,7 +72,7 @@ def create_message_filter(
 
 
 async def get_user_email(
-    user: discord.Member, dm_channel: discord.DMChannel
+    user: discord.Member, dm_channel: discord.DMChannel, bot: commands.Bot
 ) -> Optional[str]:
     await dm_channel.send(
         "\n".join(
@@ -148,10 +133,10 @@ async def check_email_registration(
     return True
 
 
-async def add_user(user: discord.Member) -> None:
+async def add_user(user: discord.Member, bot: commands.Bot) -> None:
     dm_channel = await user.create_dm()
 
-    email = await get_user_email(user, dm_channel)
+    email = await get_user_email(user, dm_channel, bot)
 
     if not email:
         return
@@ -186,16 +171,14 @@ async def add_user(user: discord.Member) -> None:
             # check for updated config every minute
             pass
 
-        if await check_email_registration(user, dm_channel, email):
-            return
+        else:
+            if reply == "q":
+                await dm_channel.send("User signup cancelled")
+                return
 
-        if reply == "q":
-            await dm_channel.send("User signup cancelled")
+        if await check_email_registration(user, dm_channel, email):
             return
 
     await dm_channel.send(
         "No authorization found for given email, please try again later"
     )
-
-
-bot.run(DISCORD_TOKEN)
