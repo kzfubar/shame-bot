@@ -23,7 +23,7 @@ LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
-SCHEDULED_POST_TIME = time(hour=2)
+SCHEDULED_UTC_POST_TIME = time(hour=2)
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
@@ -226,5 +226,4 @@ async def signup_passthrough(
     await signup(interaction, user_to_signup, bot)
 
 
-# Run the bot
 bot.run(DISCORD_TOKEN)

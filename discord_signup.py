@@ -49,7 +49,6 @@ EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 async def signup(
     interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
 ):
-    # await interaction.response.defer()
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
 
