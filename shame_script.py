@@ -149,7 +149,7 @@ async def paginate_message_send(
     await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
-@tasks.loop(time=SCHEDULED_POST_TIME)
+@tasks.loop(time=SCHEDULED_UTC_POST_TIME)
 async def fetch_and_send_tasks():
     label_name = "exclude"  # Replace with your desired label
 
