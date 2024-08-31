@@ -1,7 +1,8 @@
 import configparser
 import os
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import List, Union
+
 
 import discord
 import requests
@@ -27,12 +28,13 @@ SCHEDULED_POST_TIME = time(hour=14)
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
 TASK_TABLE_LIMIT = 10
+DISCORD_MESSAGE_LIMIT = 2000
 
 
 async def safe_send(channel: discord.TextChannel, message: str) -> discord.Message:
     safe_message = message
-    if len(message) > 2000:
-        safe_message = message[:2000:]
+    if len(message) > DISCORD_MESSAGE_LIMIT:
+        safe_message = message[:DISCORD_MESSAGE_LIMIT]
     return await channel.send(safe_message)
 
 
@@ -127,7 +129,7 @@ async def on_ready():
 
 
 async def paginate_message_send(
-    channel: discord.TextChannel, message_content: List[str], max_page: int = 2000
+    channel: discord.TextChannel, message_content: List[str], max_page: int = DISCORD_MESSAGE_LIMIT
 ):
     page_start = 0
     page_length = 0
@@ -211,10 +213,16 @@ async def fetch_and_send_tasks():
         reason="Daily Task Thread",
     )
 
+@discord.app_commands.describe(user_to_signup="Mention of user")
+@bot.tree.command(name="signup")
+async def signup_passthrough(interaction: discord.Interaction, user_to_signup: discord.Member):
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    await signup(interaction, user_to_signup, bot)
 
-discord.app_commands.describe(
-    bot.tree.command(signup, name="signup"), user_to_signup="Mention of user"
-)
+@tasks.loop(time=(datetime.now() + timedelta(seconds=30)).time())
+async def test():
+    channel = bot.get_channel(CHANNEL_ID)
+    await channel.send("MESSAGE SENT")
 
 
 # Run the bot
