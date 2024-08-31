@@ -46,7 +46,9 @@ except (configparser.NoSectionError, configparser.NoOptionError) as _:
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
-async def signup(interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot):
+async def signup(
+    interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
+):
     # await interaction.response.defer()
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
@@ -57,9 +59,7 @@ async def signup(interaction: discord.Interaction, user_to_signup: discord.Membe
         )
         return
 
-    await interaction.followup.send(
-        f"Sent {user_to_signup.mention} dm to register"
-    )
+    await interaction.followup.send(f"Sent {user_to_signup.mention} dm to register")
     await add_user(user_to_signup, bot)
 
 
@@ -176,11 +176,9 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
             if reply == "q":
                 await dm_channel.send("User signup cancelled")
                 return
-        
+
         if await check_email_registration(user, dm_channel, email):
             return
-
-        
 
     await dm_channel.send(
         "No authorization found for given email, please try again later"

@@ -130,7 +130,9 @@ async def on_ready():
 
 
 async def paginate_message_send(
-    channel: discord.TextChannel, message_content: List[str], max_page: int = DISCORD_MESSAGE_LIMIT
+    channel: discord.TextChannel,
+    message_content: List[str],
+    max_page: int = DISCORD_MESSAGE_LIMIT,
 ):
     page_start = 0
     page_length = 0
@@ -214,9 +216,12 @@ async def fetch_and_send_tasks():
         reason="Daily Task Thread",
     )
 
+
 @discord.app_commands.describe(user_to_signup="Mention of user")
 @bot.tree.command(name="signup")
-async def signup_passthrough(interaction: discord.Interaction, user_to_signup: discord.Member):
+async def signup_passthrough(
+    interaction: discord.Interaction, user_to_signup: discord.Member
+):
     await interaction.response.defer(ephemeral=True, thinking=True)
     await signup(interaction, user_to_signup, bot)
 
