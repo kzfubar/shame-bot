@@ -1,6 +1,6 @@
 import configparser
 import os
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from typing import List, Union
 
 
@@ -23,7 +23,7 @@ LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
-SCHEDULED_POST_TIME = time(hour=14)
+SCHEDULED_POST_TIME = time(hour=2)
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
@@ -124,6 +124,7 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user}")
     synced = await bot.tree.sync()
+    fetch_and_send_tasks.start()
     for command in synced:
         print(command.name)
 
@@ -218,11 +219,6 @@ async def fetch_and_send_tasks():
 async def signup_passthrough(interaction: discord.Interaction, user_to_signup: discord.Member):
     await interaction.response.defer(ephemeral=True, thinking=True)
     await signup(interaction, user_to_signup, bot)
-
-@tasks.loop(time=(datetime.now() + timedelta(seconds=30)).time())
-async def test():
-    channel = bot.get_channel(CHANNEL_ID)
-    await channel.send("MESSAGE SENT")
 
 
 # Run the bot

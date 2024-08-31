@@ -172,12 +172,15 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
             # check for updated config every minute
             pass
 
+        else:
+            if reply == "q":
+                await dm_channel.send("User signup cancelled")
+                return
+        
         if await check_email_registration(user, dm_channel, email):
             return
 
-        if reply == "q":
-            await dm_channel.send("User signup cancelled")
-            return
+        
 
     await dm_channel.send(
         "No authorization found for given email, please try again later"
