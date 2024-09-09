@@ -21,13 +21,16 @@ log_file_path = os.path.join(log_directory, "shamebot.log")
 
 logging.basicConfig(
     level=logging.INFO,  # Set level to DEBUG for more detailed logs
-    format='%(asctime)s %(levelname)s:%(message)s',
+    format="%(asctime)s %(levelname)s:%(message)s",
     handlers=[
         TimedRotatingFileHandler(
-            log_file_path, when="midnight", interval=1, backupCount=7  # Keep logs for 7 days
+            log_file_path,
+            when="midnight",
+            interval=1,
+            backupCount=7,  # Keep logs for 7 days
         ),
-        logging.StreamHandler()  # Output logs to console
-    ]
+        logging.StreamHandler(),  # Output logs to console
+    ],
 )
 
 # Example usage of logging
@@ -256,5 +259,6 @@ async def signup_passthrough(
         logging.info(f"Signup successful for user: {user_to_signup}")
     except Exception as e:
         logging.error(f"Error during signup: {e}")
+
 
 bot.run(DISCORD_TOKEN)
