@@ -2,13 +2,36 @@ import configparser
 import os
 from datetime import datetime, time
 from typing import List, Union
-
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 import discord
 import requests
 from discord.ext import commands, tasks
 from discord_signup import signup
 from table2ascii import table2ascii, TableStyle, Alignment
+
+# Create log directory if it doesn't exist
+log_directory = "log"
+if not os.path.exists(log_directory):
+    os.makedirs(log_directory)
+
+# Set up logging configuration
+log_file_path = os.path.join(log_directory, "shamebot.log")
+
+logging.basicConfig(
+    level=logging.INFO,  # Set level to DEBUG for more detailed logs
+    format='%(asctime)s %(levelname)s:%(message)s',
+    handlers=[
+        TimedRotatingFileHandler(
+            log_file_path, when="midnight", interval=1, backupCount=7  # Keep logs for 7 days
+        ),
+        logging.StreamHandler()  # Output logs to console
+    ]
+)
+
+# Example usage of logging
+logging.info("Bot is starting up...")
 
 # Read the settings.cfg file
 config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
@@ -76,9 +99,9 @@ def add_label(tasks, api_token, label_name):
 
         if create_label_response.status_code == 200:
             label_id = create_label_response.json()["id"]
-            print(f'Label "{label_name}" created successfully.')
+            logging.info(f'Label "{label_name}" created successfully.')
         else:
-            print(
+            logging.info(
                 f'Failed to create label "{label_name}": {create_label_response.status_code} - {create_label_response.text}'
             )
             return
@@ -97,9 +120,9 @@ def add_label(tasks, api_token, label_name):
         )
 
         if update_response.status_code == 200:
-            print(f"Task {task_id} updated successfully.")
+            logging.info(f"Task {task_id} updated successfully.")
         else:
-            print(
+            logging.info(
                 f"Failed to update task {task_id}: {update_response.status_code} - {update_response.text}"
             )
 
@@ -122,11 +145,14 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 
 @bot.event
 async def on_ready():
-    print(f"Bot is ready. Logged in as {bot.user}")
-    synced = await bot.tree.sync()
-    fetch_and_send_tasks.start()
-    for command in synced:
-        print(command.name)
+    logging.info(f"Bot is ready. Logged in as {bot.user}")
+    try:
+        synced = await bot.tree.sync()
+        fetch_and_send_tasks.start()
+        for command in synced:
+            logging.info(f"Command synced: {command.name}")
+    except Exception as e:
+        logging.error(f"Error during on_ready: {e}")
 
 
 async def paginate_message_send(
@@ -138,14 +164,12 @@ async def paginate_message_send(
     page_length = 0
     for line, content in enumerate(message_content):
         if len(content) + 1 + page_length > max_page:
-            # There needs to be room for the next section, and a newline
             await safe_send(channel, "\n".join(message_content[page_start:line]))
             page_start = line
             page_length = 0
-
         page_length += len(content) + 1  # add newline char
 
-    print(message_content)
+    logging.debug(f"Message content: {message_content}")
     await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
@@ -155,14 +179,17 @@ async def fetch_and_send_tasks():
 
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print("Channel not found")
+        logging.error("Channel not found")
         return
+
+    logging.info(f"Fetching and sending tasks for channel: {CHANNEL_ID}")
 
     message_content = ["**Daily Task Readout**"]
     # Load keys from the config file
     todoist_key_by_email = dict(config.items("TODOIST_KEY_BY_EMAIL"))
     discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
     for user_email, api_token in todoist_key_by_email.items():
+        logging.info(f"Processing tasks for user: {user_email}")
         discord_id = int(discord_id_by_email[user_email])
         tasks: List[dict[str, Union[dict[str, str], str]]] = get_tasks(
             api_token, label_name
@@ -222,8 +249,12 @@ async def fetch_and_send_tasks():
 async def signup_passthrough(
     interaction: discord.Interaction, user_to_signup: discord.Member
 ):
+    logging.info(f"Signup command received for user: {user_to_signup}")
     await interaction.response.defer(ephemeral=True, thinking=True)
-    await signup(interaction, user_to_signup, bot)
-
+    try:
+        await signup(interaction, user_to_signup, bot)
+        logging.info(f"Signup successful for user: {user_to_signup}")
+    except Exception as e:
+        logging.error(f"Error during signup: {e}")
 
 bot.run(DISCORD_TOKEN)
