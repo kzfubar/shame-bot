@@ -1,11 +1,8 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
-from requests.adapters import HTTPAdapter
-
-# Configure logging
-
 from typing import Dict
+import aiohttp
 
 LOG_FORMAT = (
     "{asctime} - {name:15.15} - {levelname:8} - {message} ({filename}:{lineno})"
@@ -60,29 +57,38 @@ stream_handler.setFormatter(ColorFormatter(style="{"))
 root_logger.addHandler(file_handler)
 root_logger.addHandler(stream_handler)
 
-request_logger = logging.getLogger("requests")
+request_logger = logging.getLogger("aiohttp")
+
+trace_config = aiohttp.TraceConfig()
 
 
-class LoggingAdapter(HTTPAdapter):
-    def send(self, request, **kwargs):
-        # Log the request details
-        request_logger.info(
-            "Request Details:\nMethod: %s\nURL: %s\nBody: %s",
-            request.method,
-            request.url,
-            request.body or "None",
-            # stacklevel=8
+async def on_request_start(_, __, params: aiohttp.TraceRequestStartParams):
+    request_logger.debug(
+        "Request Started: %s %s", params.method, params.url, stacklevel=6
+    )
+
+
+async def on_request_end(_, __, params: aiohttp.TraceRequestEndParams):
+    if params.response.status >= 400:
+        request_logger.error(
+            "Request Error: %s %d",
+            params.response.url,
+            params.response.status,
+            stacklevel=6,
+        )
+    else:
+        request_logger.debug(
+            "Response Received: %s %d",
+            params.response.url,
+            params.response.status,
+            stacklevel=6,
         )
 
-        # Send the request
-        response = super().send(request, **kwargs)
 
-        # Log the response details
-        request_logger.info(
-            "Response Details:\nStatus: %d\nBody: %s",
-            response.status_code,
-            response.text or "None",
-            # stacklevel=8
-        )
+async def on_request_exception(_, __, params: aiohttp.TraceRequestExceptionParams):
+    request_logger.error("Request Exception: %s", params.exception, stacklevel=6)
 
-        return response
+
+trace_config.on_request_start.append(on_request_start)
+trace_config.on_request_end.append(on_request_end)
+trace_config.on_request_exception.append(on_request_exception)
