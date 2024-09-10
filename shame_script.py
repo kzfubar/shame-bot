@@ -2,16 +2,17 @@ import configparser
 import logging
 import os
 from datetime import datetime, time
-from typing import List, TypedDict
+from typing import List
 
 import aiohttp
 import discord
 from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
 
+from Task import Task, Label
 from discord_signup import signup
-from shame_command import shame
 from log_setup import trace_config
+from shame_command import shame
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
@@ -35,23 +36,6 @@ TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
 TASK_TABLE_LIMIT = 10
 DISCORD_MESSAGE_LIMIT = 2000
-
-
-class DueOptions(TypedDict):
-    string: str
-    date: str
-
-
-class Task(TypedDict, total=False):
-    id: int
-    content: str
-    due: DueOptions
-    labels: List[str]
-
-
-class Label(TypedDict):
-    id: int
-    name: str
 
 
 async def safe_send(channel: discord.TextChannel, message: str) -> discord.Message:

@@ -1,9 +1,13 @@
 import configparser
 import logging
 import os
+from typing import List
+
 import aiohttp
 import discord
-from discord.ext import commands
+from aiohttp import ClientResponseError
+
+from Task import Task
 
 logger = logging.getLogger(__name__)
 
@@ -25,28 +29,36 @@ def get_todoist_token(email: str) -> str:
 
 
 # Get tasks from Todoist API with 'shame' label using aiohttp
-async def get_shame_tasks(todoist_token: str, session: aiohttp.ClientSession) -> list:
+async def get_shame_tasks(
+    todoist_token: str, session: aiohttp.ClientSession
+) -> List[Task]:
     headers = {"Authorization": f"Bearer {todoist_token}"}
     params = {"filter": "label:shame"}
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
         if response.status != 200:
             logger.error(f"Failed to retrieve tasks: {response.status}")
-            return []
+            raise ClientResponseError(
+                request_info=response.request_info,
+                history=response.history,
+                status=response.status,
+                message=f"Failed to retrieve tasks: {response.status}",
+            )
         return await response.json()
 
 
 # Discord bot command to shame the user
-@commands.command(name="shame")
 async def shame(interaction: discord.Interaction, user_to_shame: discord.Member):
     config.read(config_path)
-    email = None
-
     # Find the email associated with the user
-    for stored_email, discord_id in config["DISCORD_ID_BY_EMAIL"].items():
-        if discord_id == str(user_to_shame.id):
-            email = stored_email
-            break
+    email = next(
+        (
+            stored_email
+            for stored_email, discord_id in config["DISCORD_ID_BY_EMAIL"].items()
+            if discord_id == str(user_to_shame.id)
+        ),
+        None,
+    )
 
     if email is None:
         await interaction.followup.send(f"{user_to_shame.mention} is not signed up!")
@@ -68,13 +80,9 @@ async def shame(interaction: discord.Interaction, user_to_shame: discord.Member)
             await interaction.followup.send(
                 f"{user_to_shame.mention} has nothing to be ashamed of!"
             )
-        else:
-            task_list = "\n".join([task["content"] for task in shame_tasks])
-            await interaction.followup.send(
-                f"For shame {user_to_shame.mention}!\n{task_list}"
-            )
+            return
 
-
-# Add this command to the bot
-def setup(bot):
-    bot.add_command(shame)
+        task_list = "\n".join([task["content"] for task in shame_tasks])
+        await interaction.followup.send(
+            f"For shame {user_to_shame.mention}!\n{task_list}"
+        )
