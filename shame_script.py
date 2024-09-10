@@ -2,15 +2,17 @@ import configparser
 import logging
 import os
 from datetime import datetime, time
-from typing import List, TypedDict
+from typing import List
 
 import aiohttp
 import discord
 from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
 
+from Task import Task, Label
 from discord_signup import signup
 from log_setup import trace_config
+from shame_command import shame
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
@@ -34,23 +36,6 @@ TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
 TASK_TABLE_LIMIT = 10
 DISCORD_MESSAGE_LIMIT = 2000
-
-
-class DueOptions(TypedDict):
-    string: str
-    date: str
-
-
-class Task(TypedDict, total=False):
-    id: int
-    content: str
-    due: DueOptions
-    labels: List[str]
-
-
-class Label(TypedDict):
-    id: int
-    name: str
 
 
 async def safe_send(channel: discord.TextChannel, message: str) -> discord.Message:
@@ -270,6 +255,25 @@ async def signup_passthrough(
         logger.info("Signup successful for user: %s", user_to_signup.name)
     except Exception:
         logger.exception("Error during signup")
+
+
+@discord.app_commands.describe(user_to_shame="Mention of user")
+@bot.tree.command(name="shame")
+async def shame_passthrough(
+    interaction: discord.Interaction, user_to_shame: discord.Member
+):
+    logger.info("Shame command received for user: %s", user_to_shame.name)
+
+    await interaction.response.defer(ephemeral=False, thinking=True)
+    try:
+        await shame(interaction, user_to_shame)
+        logger.info("Shaming successful for user: %s", user_to_shame.name)
+
+    except Exception:
+        logger.exception("Error during shaming: %s")
+        await interaction.followup.send(
+            "An error occurred while processing the shame command."
+        )
 
 
 bot.run(DISCORD_TOKEN, log_handler=None)
