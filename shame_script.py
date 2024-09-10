@@ -3,7 +3,8 @@ import os
 from datetime import datetime, time
 from typing import List, Union
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from log_setup import LoggingAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 import discord
 import requests
@@ -11,30 +12,17 @@ from discord.ext import commands, tasks
 from discord_signup import signup
 from table2ascii import table2ascii, TableStyle, Alignment
 
-# Create log directory if it doesn't exist
-log_directory = "log"
-if not os.path.exists(log_directory):
-    os.makedirs(log_directory)
 
-# Set up logging configuration
-log_file_path = os.path.join(log_directory, "shamebot.log")
+logger = logging.getLogger(__name__)
+logger.info("Bot is starting up...")
 
-logging.basicConfig(
-    level=logging.INFO,  # Set level to DEBUG for more detailed logs
-    format="%(asctime)s %(levelname)s:%(message)s",
-    handlers=[
-        TimedRotatingFileHandler(
-            log_file_path,
-            when="midnight",
-            interval=1,
-            backupCount=7,  # Keep logs for 7 days
-        ),
-        logging.StreamHandler(),  # Output logs to console
-    ],
-)
+session = requests.Session()
+adapter = LoggingAdapter(max_retries=Retry(total=3, backoff_factor=0.1))
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
-# Example usage of logging
-logging.info("Bot is starting up...")
+response = session.get("https://jsonplaceholder.typicode.com/posts/1")
+
 
 # Read the settings.cfg file
 config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
@@ -49,7 +37,7 @@ LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
-SCHEDULED_UTC_POST_TIME = time(hour=2)
+SCHEDULED_UTC_POST_TIME = time(hour=2, minute=32)
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
@@ -70,7 +58,8 @@ def get_tasks(api_token, label_name):
 
     # Get all tasks
     params = {"filter": f"(today | overdue) & !@{label_name}"}
-    response = requests.get(TODOIST_API, params=params, headers=headers)
+    response = session.get(TODOIST_API, params=params, headers=headers)
+    logger.debug("Request from todoist")
     return response.json()
 
 
@@ -81,7 +70,7 @@ def add_label(tasks, api_token, label_name):
     }
 
     # First, we need to get the ID of the label from the label name
-    labels_response = requests.get(
+    labels_response = session.get(
         "https://api.todoist.com/rest/v2/labels", headers=headers
     )
     labels = labels_response.json()
@@ -94,7 +83,7 @@ def add_label(tasks, api_token, label_name):
 
     if label_id is None:
         # Create the label if it does not exist
-        create_label_response = requests.post(
+        create_label_response = session.post(
             "https://api.todoist.com/rest/v2/labels",
             json={"name": label_name, "color": "lavender"},
             headers=headers,
@@ -102,10 +91,13 @@ def add_label(tasks, api_token, label_name):
 
         if create_label_response.status_code == 200:
             label_id = create_label_response.json()["id"]
-            logging.info(f'Label "{label_name}" created successfully.')
+            logger.info('Label "%s" created successfully.', label_name)
         else:
-            logging.info(
-                f'Failed to create label "{label_name}": {create_label_response.status_code} - {create_label_response.text}'
+            logger.info(
+                'Failed to create label "%s": %d - %s',
+                label_name,
+                create_label_response.status_code,
+                create_label_response.text,
             )
             return
 
@@ -118,15 +110,18 @@ def add_label(tasks, api_token, label_name):
         data = {"labels": labels}
 
         # Update the task with the new label
-        update_response = requests.post(
+        update_response = session.post(
             f"{TODOIST_API}/{task_id}", json=data, headers=headers
         )
 
         if update_response.status_code == 200:
-            logging.info(f"Task {task_id} updated successfully.")
+            logger.info("Task %s updated successfully.", task_id)
         else:
-            logging.info(
-                f"Failed to update task {task_id}: {update_response.status_code} - {update_response.text}"
+            logger.info(
+                "Failed to update task %s: %d - %s",
+                task_id,
+                update_response.status_code,
+                update_response.text,
             )
 
 
@@ -148,14 +143,14 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 
 @bot.event
 async def on_ready():
-    logging.info(f"Bot is ready. Logged in as {bot.user}")
+    logger.info("Bot is ready. Logged in as %s", bot.user)
     try:
         synced = await bot.tree.sync()
         fetch_and_send_tasks.start()
         for command in synced:
-            logging.info(f"Command synced: {command.name}")
-    except Exception as e:
-        logging.error(f"Error during on_ready: {e}")
+            logger.info("Command synced: %s", command.name)
+    except Exception:
+        logger.exception("Error during on_ready")
 
 
 async def paginate_message_send(
@@ -172,7 +167,7 @@ async def paginate_message_send(
             page_length = 0
         page_length += len(content) + 1  # add newline char
 
-    logging.debug(f"Message content: {message_content}")
+    logger.debug("Message content: %s", message_content)
     await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
@@ -182,17 +177,17 @@ async def fetch_and_send_tasks():
 
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        logging.error("Channel not found")
+        logger.error("Channel not found")
         return
 
-    logging.info(f"Fetching and sending tasks for channel: {CHANNEL_ID}")
+    logger.info("Fetching and sending tasks for channel: %d", CHANNEL_ID)
 
     message_content = ["**Daily Task Readout**"]
     # Load keys from the config file
     todoist_key_by_email = dict(config.items("TODOIST_KEY_BY_EMAIL"))
     discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
     for user_email, api_token in todoist_key_by_email.items():
-        logging.info(f"Processing tasks for user: {user_email}")
+        logger.info("Processing tasks for user: %s", user_email)
         discord_id = int(discord_id_by_email[user_email])
         tasks: List[dict[str, Union[dict[str, str], str]]] = get_tasks(
             api_token, label_name
@@ -252,13 +247,13 @@ async def fetch_and_send_tasks():
 async def signup_passthrough(
     interaction: discord.Interaction, user_to_signup: discord.Member
 ):
-    logging.info(f"Signup command received for user: {user_to_signup}")
+    logger.info("Signup command received for user: %s", user_to_signup.name)
     await interaction.response.defer(ephemeral=True, thinking=True)
     try:
         await signup(interaction, user_to_signup, bot)
-        logging.info(f"Signup successful for user: {user_to_signup}")
-    except Exception as e:
-        logging.error(f"Error during signup: {e}")
+        logger.info("Signup successful for user: %s", user_to_signup.name)
+    except Exception:
+        logger.exception("Error during signup")
 
 
-bot.run(DISCORD_TOKEN)
+bot.run(DISCORD_TOKEN, log_handler=None)

@@ -1,6 +1,3 @@
-# This is a test file for a user sign-up flow.
-# It requires the bot to be alive at all times, so I have not merged it into the main script (yet?)
-
 import configparser
 import os
 import re
@@ -8,6 +5,9 @@ from typing import Callable, Optional
 import asyncio
 import discord
 from discord.ext import commands
+import logging
+
+logger = logging.getLogger(__name__)
 
 ONE_MINUTE = 60
 SIGNUP_TIMEOUT = ONE_MINUTE * 10
@@ -34,13 +34,13 @@ try:
     SERVER_ID = config.getint("DISCORD", "SERVER_ID")
     LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    print("Discord config set incorrectly")
+    logger.error("Discord config set incorrectly")
     exit()
 
 try:
     TODOIST_LINK = config.get("TODOIST_AUTH", "APP_LINK")
 except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    print("Todoist App link not set")
+    logger.error("Todoist App link not set")
     exit()
 
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -124,7 +124,7 @@ async def check_email_registration(
         return False
 
     await dm_channel.send("Todoist Linking complete!")
-    print(f"added user- user: {user.name}, email: {email}")
+    logger.info("added user- user: %s, email: %s", user.name, email)
     config["DISCORD_ID_BY_EMAIL"][email] = str(user.id)
 
     with open(config_path, "w") as configfile:
@@ -141,7 +141,7 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
     if not email:
         return
 
-    print(f"received email- user: {user.name}, email: {email}")
+    logger.info("received email- user: %s, email: %s", user.name, email)
 
     if await check_email_registration(user, dm_channel, email):
         return
