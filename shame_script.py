@@ -1,14 +1,19 @@
 import configparser
+import logging
 import os
 from datetime import datetime, time
-from typing import List, Union
+from typing import List, TypedDict
 
-
+import aiohttp
 import discord
-import requests
 from discord.ext import commands, tasks
+from table2ascii import Alignment, TableStyle, table2ascii
+
 from discord_signup import signup
-from table2ascii import table2ascii, TableStyle, Alignment
+from log_setup import trace_config
+
+logger = logging.getLogger(__name__)
+logger.info("Bot is starting up...")
 
 # Read the settings.cfg file
 config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
@@ -31,6 +36,23 @@ TASK_TABLE_LIMIT = 10
 DISCORD_MESSAGE_LIMIT = 2000
 
 
+class DueOptions(TypedDict):
+    string: str
+    date: str
+
+
+class Task(TypedDict, total=False):
+    id: int
+    content: str
+    due: DueOptions
+    labels: List[str]
+
+
+class Label(TypedDict):
+    id: int
+    name: str
+
+
 async def safe_send(channel: discord.TextChannel, message: str) -> discord.Message:
     safe_message = message
     if len(message) > DISCORD_MESSAGE_LIMIT:
@@ -39,69 +61,80 @@ async def safe_send(channel: discord.TextChannel, message: str) -> discord.Messa
 
 
 # Function to get all tasks with a specific label and due today or overdue
-def get_tasks(api_token, label_name):
+async def get_tasks(
+    api_token: str, label_name: str, session: aiohttp.ClientSession
+) -> List[Task] | None:
     headers = {"Authorization": f"Bearer {api_token}"}
 
     # Get all tasks
     params = {"filter": f"(today | overdue) & !@{label_name}"}
-    response = requests.get(TODOIST_API, params=params, headers=headers)
-    return response.json()
+    async with session.get(TODOIST_API, params=params, headers=headers) as response:
+        logger.debug("Request from todoist")
+        return await response.json()
 
 
-def add_label(tasks, api_token, label_name):
+async def add_label(
+    task_list: List[Task],
+    api_token: str,
+    label_name: str,
+    session: aiohttp.ClientSession,
+):
     headers = {
         "Authorization": f"Bearer {api_token}",
         "Content-Type": "application/json",
     }
 
     # First, we need to get the ID of the label from the label name
-    labels_response = requests.get(
+    async with session.get(
         "https://api.todoist.com/rest/v2/labels", headers=headers
-    )
-    labels = labels_response.json()
-    label_id = None
+    ) as labels_response:
+        labels: List[Label] = await labels_response.json()
 
-    for label in labels:
-        if label["name"] == label_name:
-            label_id = label["id"]
-            break
+    label_id = next(
+        (label["id"] for label in labels if label["name"] == label_name), None
+    )
 
     if label_id is None:
         # Create the label if it does not exist
-        create_label_response = requests.post(
+        async with session.post(
             "https://api.todoist.com/rest/v2/labels",
             json={"name": label_name, "color": "lavender"},
             headers=headers,
-        )
+        ) as create_label_response:
+            if create_label_response.status == 200:
+                await create_label_response.json()
+                logger.info('Label "%s" created successfully.', label_name)
+            else:
+                logger.info(
+                    'Failed to create label "%s": %d - %s',
+                    label_name,
+                    create_label_response.status,
+                    await create_label_response.text(),
+                )
+                return
 
-        if create_label_response.status_code == 200:
-            label_id = create_label_response.json()["id"]
-            print(f'Label "{label_name}" created successfully.')
-        else:
-            print(
-                f'Failed to create label "{label_name}": {create_label_response.status_code} - {create_label_response.text}'
-            )
-            return
+    for task in task_list:
+        task_id = task.get("id", 0)
+        task_labels = task.get("labels", [])
+        if label_name in labels:
+            continue
 
-    for task in tasks:
-        task_id = task["id"]
-        labels = task.get("labels", [])
-        if label_name not in labels:
-            labels.append(label_name)
-
-        data = {"labels": labels}
+        task_labels.append(label_name)
+        data = {"labels": task_labels}
 
         # Update the task with the new label
-        update_response = requests.post(
+        async with session.post(
             f"{TODOIST_API}/{task_id}", json=data, headers=headers
-        )
-
-        if update_response.status_code == 200:
-            print(f"Task {task_id} updated successfully.")
-        else:
-            print(
-                f"Failed to update task {task_id}: {update_response.status_code} - {update_response.text}"
-            )
+        ) as update_response:
+            if update_response.status == 200:
+                logger.info("Task %s updated successfully.", task_id)
+            else:
+                logger.info(
+                    "Failed to update task %s: %d - %s",
+                    task_id,
+                    update_response.status,
+                    await update_response.text(),
+                )
 
 
 def string_shorten(message: str, max_length: int):
@@ -122,11 +155,14 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 
 @bot.event
 async def on_ready():
-    print(f"Bot is ready. Logged in as {bot.user}")
-    synced = await bot.tree.sync()
-    fetch_and_send_tasks.start()
-    for command in synced:
-        print(command.name)
+    logger.info("Bot is ready. Logged in as %s", bot.user)
+    try:
+        synced = await bot.tree.sync()
+        fetch_and_send_tasks.start()
+        for command in synced:
+            logger.info("Command synced: %s", command.name)
+    except Exception:
+        logger.exception("Error during on_ready")
 
 
 async def paginate_message_send(
@@ -138,14 +174,12 @@ async def paginate_message_send(
     page_length = 0
     for line, content in enumerate(message_content):
         if len(content) + 1 + page_length > max_page:
-            # There needs to be room for the next section, and a newline
             await safe_send(channel, "\n".join(message_content[page_start:line]))
             page_start = line
             page_length = 0
-
         page_length += len(content) + 1  # add newline char
 
-    print(message_content)
+    logger.debug("Message content: %s", message_content)
     await safe_send(channel, "\n".join(message_content[page_start:]))
 
 
@@ -153,29 +187,38 @@ async def paginate_message_send(
 async def fetch_and_send_tasks():
     label_name = "exclude"  # Replace with your desired label
 
-    channel = bot.get_channel(CHANNEL_ID)
+    channel: discord.TextChannel = bot.get_channel(CHANNEL_ID)  # type: ignore
     if not channel:
-        print("Channel not found")
+        logger.error("Channel not found")
         return
 
+    logger.info("Fetching and sending tasks for channel: %d", CHANNEL_ID)
+
     message_content = ["**Daily Task Readout**"]
+
     # Load keys from the config file
     todoist_key_by_email = dict(config.items("TODOIST_KEY_BY_EMAIL"))
     discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
-    for user_email, api_token in todoist_key_by_email.items():
-        discord_id = int(discord_id_by_email[user_email])
-        tasks: List[dict[str, Union[dict[str, str], str]]] = get_tasks(
-            api_token, label_name
-        )
-        add_label(tasks, api_token, "shame")
-        discord_user = await bot.fetch_user(discord_id)
 
-        if tasks:
-            task_count = len(tasks)
+    async with aiohttp.ClientSession(trace_configs=[trace_config]) as session:
+        for user_email, api_token in todoist_key_by_email.items():
+            logger.info("Processing tasks for user: %s", user_email)
+            discord_id = int(discord_id_by_email[user_email])
+
+            task_list = await get_tasks(api_token, label_name, session)
+            discord_user = await bot.fetch_user(discord_id)
+
+            if not task_list:
+                message_content.append(f"{discord_user.mention} Completed all tasks")
+                continue
+
+            await add_label(task_list, api_token, "shame", session)
+
+            task_count = len(task_list)
             if task_count > TASK_TABLE_LIMIT:
                 # subtract 1 from the task limit to leave room for the "more tasks" line
-                tasks = tasks[: TASK_TABLE_LIMIT - 1]
-                tasks.append(
+                task_list = task_list[: TASK_TABLE_LIMIT - 1]
+                task_list.append(
                     {
                         "content": f"...{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)"
                     }
@@ -189,7 +232,7 @@ async def fetch_and_send_tasks():
                             task.get("due", {}).get("string", ""), INTERVAL_MAX_LENGTH
                         ),
                     ]
-                    for task in tasks
+                    for task in task_list
                 ],
                 style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
                 alignments=Alignment.LEFT,
@@ -199,8 +242,6 @@ async def fetch_and_send_tasks():
             message_content.append(
                 f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
             )
-        else:
-            message_content.append(f"{discord_user.mention} Completed all tasks")
 
     await paginate_message_send(channel, message_content)
 
@@ -222,8 +263,13 @@ async def fetch_and_send_tasks():
 async def signup_passthrough(
     interaction: discord.Interaction, user_to_signup: discord.Member
 ):
+    logger.info("Signup command received for user: %s", user_to_signup.name)
     await interaction.response.defer(ephemeral=True, thinking=True)
-    await signup(interaction, user_to_signup, bot)
+    try:
+        await signup(interaction, user_to_signup, bot)
+        logger.info("Signup successful for user: %s", user_to_signup.name)
+    except Exception:
+        logger.exception("Error during signup")
 
 
-bot.run(DISCORD_TOKEN)
+bot.run(DISCORD_TOKEN, log_handler=None)

@@ -1,5 +1,5 @@
 ruff
 discord
 table2ascii
-requests
+aiohttp
 flask
