@@ -269,8 +269,8 @@ async def shame_passthrough(
         await shame(interaction, user_to_shame)
         logger.info("Shaming successful for user: %s", user_to_shame.name)
 
-    except Exception as e:
-        logger.exception("Error during shaming: %s", e)
+    except Exception:
+        logger.exception("Error during shaming: %s")
         await interaction.followup.send(
             "An error occurred while processing the shame command."
         )

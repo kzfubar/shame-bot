@@ -37,7 +37,7 @@ async def get_shame_tasks(
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
         if response.status != 200:
-            logger.error(f"Failed to retrieve tasks: {response.status}")
+            logger.error("Failed to retrieve tasks: %s", response.status)
             raise ClientResponseError(
                 request_info=response.request_info,
                 history=response.history,
