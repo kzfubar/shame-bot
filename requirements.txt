@@ -1,5 +1,7 @@
-ruff
 discord
+ruff
 table2ascii
 aiohttp
 flask
+todoist_api_python
+requests

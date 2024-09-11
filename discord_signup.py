@@ -1,11 +1,13 @@
-import configparser
-import os
-import re
-from typing import Callable, Optional
 import asyncio
+import configparser
+import logging
+import re
+import sys
+from pathlib import Path
+from typing import Callable, Optional
+
 import discord
 from discord.ext import commands
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +15,7 @@ ONE_MINUTE = 60
 SIGNUP_TIMEOUT = ONE_MINUTE * 10
 
 # Read the settings.cfg file
-config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
+config_path = Path(__file__).parent / "settings.cfg"
 config = configparser.ConfigParser()
 config.read(config_path)
 
@@ -24,7 +26,7 @@ if "DISCORD_ID_BY_EMAIL" not in config:
 if "DISCORD_ID_BY_EMAIL" not in config:
     config["DISCORD_ID_BY_EMAIL"] = {}
 
-with open(config_path, "w") as configfile:
+with Path.open(config_path, "w", encoding="utf-8") as configfile:
     config.write(configfile)
 
 # Load the Discord bot token and channel ID from the config file
@@ -34,21 +36,21 @@ try:
     SERVER_ID = config.getint("DISCORD", "SERVER_ID")
     LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    logger.error("Discord config set incorrectly")
-    exit()
+    logger.exception("Discord config set incorrectly")
+    sys.exit()
 
 try:
     TODOIST_LINK = config.get("TODOIST_AUTH", "APP_LINK")
 except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    logger.error("Todoist App link not set")
-    exit()
+    logger.exception("Todoist App link not set")
+    sys.exit()
 
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
 async def signup(
     interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
-):
+) -> None:
     config.read(config_path)
     existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
 
@@ -127,7 +129,7 @@ async def check_email_registration(
     logger.info("added user- user: %s, email: %s", user.name, email)
     config["DISCORD_ID_BY_EMAIL"][email] = str(user.id)
 
-    with open(config_path, "w") as configfile:
+    with Path.open(config_path, "w") as configfile:
         config.write(configfile)
 
     return True

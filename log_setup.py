@@ -1,7 +1,9 @@
 import logging
+from http import HTTPStatus
 from logging.handlers import TimedRotatingFileHandler
-import os
-from typing import Dict
+from pathlib import Path
+from typing import ClassVar
+
 import aiohttp
 
 LOG_FORMAT = (
@@ -17,7 +19,7 @@ class ColorFormatter(logging.Formatter):
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
 
-    FORMATS: Dict[int, str] = {
+    FORMATS: ClassVar[dict[int, str]] = {
         logging.DEBUG: grey + LOG_FORMAT + reset,
         logging.INFO: grey + LOG_FORMAT + reset,
         logging.WARNING: yellow + LOG_FORMAT + reset,
@@ -25,7 +27,7 @@ class ColorFormatter(logging.Formatter):
         logging.CRITICAL: bold_red + LOG_FORMAT + reset,
     }
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(fmt=log_fmt, datefmt=DATE_FORMAT, style="{")
         return formatter.format(record)
@@ -33,8 +35,8 @@ class ColorFormatter(logging.Formatter):
 
 # Create log directory if it doesn't exist
 log_directory = "log"
-if not os.path.exists(log_directory):
-    os.makedirs(log_directory)
+if not Path(log_directory).exists:
+    Path(log_directory).mkdir(parents=True)
 
 
 # change the behavior of the root logger so all other loggers inherit this behavior
@@ -42,7 +44,7 @@ root_logger = logging.getLogger()
 root_logger.setLevel(logging.DEBUG)
 
 # Set up handlers (applies to all loggers unless overridden)
-log_file_path = os.path.join(log_directory, "shamebot.log")
+log_file_path = Path(log_directory) / "shamebot.log"
 file_handler = TimedRotatingFileHandler(
     log_file_path, when="midnight", interval=1, backupCount=7, utc=True
 )
@@ -62,14 +64,14 @@ request_logger = logging.getLogger("aiohttp")
 trace_config = aiohttp.TraceConfig()
 
 
-async def on_request_start(_, __, params: aiohttp.TraceRequestStartParams):
+async def on_request_start(_, __, params: aiohttp.TraceRequestStartParams) -> None:  # noqa: RUF029
     request_logger.debug(
         "Request Started: %s %s", params.method, params.url, stacklevel=6
     )
 
 
-async def on_request_end(_, __, params: aiohttp.TraceRequestEndParams):
-    if params.response.status >= 400:
+async def on_request_end(_, __, params: aiohttp.TraceRequestEndParams) -> None:  # noqa: RUF029
+    if params.response.status >= HTTPStatus.SERVICE_UNAVAILABLE:
         request_logger.error(
             "Request Error: %s %d",
             params.response.url,
@@ -85,7 +87,9 @@ async def on_request_end(_, __, params: aiohttp.TraceRequestEndParams):
         )
 
 
-async def on_request_exception(_, __, params: aiohttp.TraceRequestExceptionParams):
+async def on_request_exception(  # noqa: RUF029
+    _, __, params: aiohttp.TraceRequestExceptionParams
+) -> None:
     request_logger.error("Request Exception: %s", params.exception, stacklevel=6)
 
 
