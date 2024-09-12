@@ -143,9 +143,9 @@ def clear_shame(token: str, completed_task_id: str) -> None:
         success = api.update_task(task_id=completed_task_id, labels=updated_labels)
 
         if success:
-            pass
+            logger.info("Cleared shame on task %s", completed_task_id)
         else:
-            pass
+            logger.warning("Failed to clear shame on task %s", completed_task_id)
     except Exception:
         logger.exception("Failed to clear shame")
 
