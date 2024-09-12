@@ -1,0 +1,11 @@
+fix = true
+show-fixes = true
+
+[lint]
+# https://docs.astral.sh/ruff/rules/
+select = ["E1", "E2", "E3", "E4", "E7", "F", "W", "I", "N", "UP", "B", "A", "C4", "T10", "ICN", "LOG", "PIE", "T20", "PYI", "PT", "Q", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "ARG", "FIX", "ERA", "PLC", "PLE", "R", "PLW", "PERF", "FURB", "DOC", "ANN", "ASYNC", "S", "G", "PTH", "PL", "TRY", "RUF"]
+ignore = ["S101", "EM101"]
+preview = true
+
+[lint.flake8-annotations]
+suppress-dummy-args = true

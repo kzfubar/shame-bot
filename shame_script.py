@@ -1,7 +1,8 @@
 import configparser
 import logging
-import os
 from datetime import datetime, time
+from http import HTTPStatus
+from pathlib import Path
 from typing import List
 
 import aiohttp
@@ -9,16 +10,16 @@ import discord
 from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
 
-from Task import Task, Label
 from discord_signup import signup
 from log_setup import trace_config
 from shame_command import shame
+from Task import Label, Task
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
 
 # Read the settings.cfg file
-config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
+config_path = Path(__file__).parent / "settings.cfg"
 config = configparser.ConfigParser()
 config.read(config_path)
 
@@ -63,7 +64,7 @@ async def add_label(
     api_token: str,
     label_name: str,
     session: aiohttp.ClientSession,
-):
+) -> None:
     headers = {
         "Authorization": f"Bearer {api_token}",
         "Content-Type": "application/json",
@@ -86,7 +87,7 @@ async def add_label(
             json={"name": label_name, "color": "lavender"},
             headers=headers,
         ) as create_label_response:
-            if create_label_response.status == 200:
+            if create_label_response.status == HTTPStatus.OK:
                 await create_label_response.json()
                 logger.info('Label "%s" created successfully.', label_name)
             else:
@@ -111,7 +112,7 @@ async def add_label(
         async with session.post(
             f"{TODOIST_API}/{task_id}", json=data, headers=headers
         ) as update_response:
-            if update_response.status == 200:
+            if update_response.status == HTTPStatus.OK:
                 logger.info("Task %s updated successfully.", task_id)
             else:
                 logger.info(
@@ -122,7 +123,7 @@ async def add_label(
                 )
 
 
-def string_shorten(message: str, max_length: int):
+def string_shorten(message: str, max_length: int) -> str:
     message = message.strip()
 
     if len(message) <= max_length:
@@ -139,7 +140,7 @@ bot = commands.Bot(intents=intents, command_prefix="!")
 
 
 @bot.event
-async def on_ready():
+async def on_ready() -> None:
     logger.info("Bot is ready. Logged in as %s", bot.user)
     try:
         synced = await bot.tree.sync()
@@ -154,7 +155,7 @@ async def paginate_message_send(
     channel: discord.TextChannel,
     message_content: List[str],
     max_page: int = DISCORD_MESSAGE_LIMIT,
-):
+) -> None:
     page_start = 0
     page_length = 0
     for line, content in enumerate(message_content):
@@ -169,7 +170,7 @@ async def paginate_message_send(
 
 
 @tasks.loop(time=SCHEDULED_UTC_POST_TIME)
-async def fetch_and_send_tasks():
+async def fetch_and_send_tasks() -> None:
     label_name = "exclude"  # Replace with your desired label
 
     channel: discord.TextChannel = bot.get_channel(CHANNEL_ID)  # type: ignore
@@ -247,7 +248,7 @@ async def fetch_and_send_tasks():
 @bot.tree.command(name="signup")
 async def signup_passthrough(
     interaction: discord.Interaction, user_to_signup: discord.Member
-):
+) -> None:
     logger.info("Signup command received for user: %s", user_to_signup.name)
     await interaction.response.defer(ephemeral=True, thinking=True)
     try:
@@ -261,7 +262,7 @@ async def signup_passthrough(
 @bot.tree.command(name="shame")
 async def shame_passthrough(
     interaction: discord.Interaction, user_to_shame: discord.Member
-):
+) -> None:
     logger.info("Shame command received for user: %s", user_to_shame.name)
 
     await interaction.response.defer(ephemeral=False, thinking=True)

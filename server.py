@@ -1,19 +1,24 @@
 import configparser
-import os
+import logging
+from http import HTTPStatus
+from pathlib import Path
 
 import requests
-from flask import Flask, request, jsonify
+from aiohttp import ClientError
+from flask import Flask, Response, jsonify, request
 from todoist_api_python.api import TodoistAPI
 
 app = Flask(__name__)
 # Load configuration from the settings.cfg file
-config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
+config_path = Path(__file__).parent / "settings.cfg"
 config = configparser.ConfigParser()
 config.read(config_path)
 
+logger = logging.getLogger(__name__)
+
 
 @app.route("/connect", methods=["POST"])
-def connect():
+def connect() -> tuple[Response, int]:
     client_id = config["TODOIST_AUTH"]["CLIENT_ID"]
     redirect_uri = config["TODOIST_AUTH"]["REDIRECT_URI"]
     auth_url = f"https://todoist.com/oauth/authorize?client_id={client_id}&scope=data:read_write&state=yoink&redirect_uri={redirect_uri}"
@@ -24,33 +29,39 @@ def connect():
                 "body": [{"text": auth_url, "type": "TextBlock"}],
             }
         }
-    ), 200
+    ), HTTPStatus.OK
 
 
 @app.route("/webhook", methods=["POST"])
-def webhook():
+def webhook() -> tuple[str, int]:
     data = request.json
-    print(data)
-
-    if data["event_name"] == "item:completed":
-        task_id = data["event_data"]["id"]
-        user_id = data["event_data"]["user_id"]
-        token = get_auth_token(user_id)
-        clear_shame(token, task_id)
-    return "", 200
+    try:
+        if data is None or "event_name" not in data:
+            return "", HTTPStatus.BAD_REQUEST
+        if data["event_name"] == "item:completed":
+            task_id = data["event_data"]["id"]
+            user_id = data["event_data"]["user_id"]
+            token = get_auth_token(user_id)
+            clear_shame(token, task_id)
+    except Exception:
+        logger.exception("Error processing webhook")
+        return "", HTTPStatus.INTERNAL_SERVER_ERROR
+    return "", HTTPStatus.OK
 
 
 @app.route("/auth", methods=["GET"])
-def auth():
+def auth() -> tuple[str, int]:
     code = request.args.get("code")
+    if not code:
+        return "No code provided", HTTPStatus.BAD_REQUEST
     access_token = exchange_code_for_token(code)
     user_id, user_email = get_user_info_from_todoist(access_token)
     if user_id and user_email:
         add_user_info_to_config(user_id, user_email, access_token)
-    return "Success", 200
+    return "Success", HTTPStatus.OK
 
 
-def exchange_code_for_token(code):
+def exchange_code_for_token(code: str) -> str:
     client_id = config["TODOIST_AUTH"]["CLIENT_ID"]
     client_secret = config["TODOIST_AUTH"]["CLIENT_SECRET"]
     redirect_uri = config["TODOIST_AUTH"]["REDIRECT_URI"]
@@ -64,33 +75,31 @@ def exchange_code_for_token(code):
             "code": code,
             "redirect_uri": redirect_uri,
         },
+        timeout=10,
     )
 
     response_json = response.json()
-    print(response_json)
     return response_json.get("access_token")
 
 
-def get_user_info_from_todoist(access_token):
+def get_user_info_from_todoist(access_token: str) -> tuple[str, str]:
     sync_url = "https://api.todoist.com/sync/v9/sync"
     headers = {"Authorization": f"Bearer {access_token}"}
 
     data = {"sync_token": "*", "resource_types": '["user"]'}
 
-    response = requests.post(sync_url, headers=headers, data=data)
+    response = requests.post(sync_url, headers=headers, data=data, timeout=10)
 
-    if response.status_code == 200:
+    if response.status_code == HTTPStatus.OK:
         response_json = response.json()
         user_info = response_json.get("user", {})
         user_id = user_info.get("id")
         user_email = user_info.get("email")
         return user_id, user_email
-    else:
-        print(f"Failed to fetch user info: {response.status_code} - {response.text}")
-        return None, None
+    raise ClientError
 
 
-def add_user_info_to_config(user_id, user_email, access_token):
+def add_user_info_to_config(user_id: str, user_email: str, access_token: str) -> None:
     if "TODOIST_KEY_BY_EMAIL" not in config:
         config["TODOIST_KEY_BY_EMAIL"] = {}
     config["TODOIST_KEY_BY_EMAIL"][user_email] = access_token
@@ -99,46 +108,46 @@ def add_user_info_to_config(user_id, user_email, access_token):
         config["EMAIL_BY_TODOIST_ID"] = {}
     config["EMAIL_BY_TODOIST_ID"][user_id] = user_email
 
-    with open(config_path, "w") as configfile:
+    with Path.open(config_path, "w", encoding="utf-8") as configfile:
         config.write(configfile)
 
 
-def get_auth_token(user_id):
+def get_auth_token(user_id: int) -> str:
     # Check if the user ID exists in the config
     if str(user_id) in config["EMAIL_BY_TODOIST_ID"]:
         user_email = config["EMAIL_BY_TODOIST_ID"][str(user_id)]
         return config["TODOIST_KEY_BY_EMAIL"][str(user_email)]
-    else:
-        # Redirect to the Todoist OAuth authorization page
-        return
+    # Redirect to the Todoist OAuth authorization page
+    msg = f"No token found for user_id: {user_id}"
+    raise ValueError(msg)
 
 
-def get_todoist_token(user_id):
+def get_todoist_token(user_id: str) -> str:
     # Retrieve the token using the user_id from the appropriate section
     token = config["TODOIST_KEY_BY_EMAIL"].get(user_id)
     if not token:
-        raise ValueError(f"No token found for user_id: {user_id}")
+        msg = f"No token found for user_id: {user_id}"
+        raise ValueError(msg)
 
     return token
 
 
-def clear_shame(token, completed_task_id):
+def clear_shame(token: str, completed_task_id: str) -> None:
     try:
         api = TodoistAPI(token)
         task = api.get_task(completed_task_id)
-        if task is None:
-            print(f"Task with ID {completed_task_id} not found.")
+        if task is None or task.labels is None:
             return
 
         updated_labels = [label for label in task.labels if label != "shame"]
         success = api.update_task(task_id=completed_task_id, labels=updated_labels)
 
         if success:
-            print("Label cleared successfully.")
+            logger.info("Cleared shame on task %s", completed_task_id)
         else:
-            print("Failed to update task.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+            logger.warning("Failed to clear shame on task %s", completed_task_id)
+    except Exception:
+        logger.exception("Failed to clear shame")
 
 
 if __name__ == "__main__":

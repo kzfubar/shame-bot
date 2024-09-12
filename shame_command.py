@@ -1,6 +1,7 @@
 import configparser
 import logging
-import os
+from http import HTTPStatus
+from pathlib import Path
 from typing import List
 
 import aiohttp
@@ -12,7 +13,7 @@ from Task import Task
 logger = logging.getLogger(__name__)
 
 # Load the config file
-config_path = os.path.join(os.path.dirname(__file__), "settings.cfg")
+config_path = Path(__file__).parent / "settings.cfg"
 config = configparser.ConfigParser()
 config.read(config_path)
 
@@ -24,8 +25,7 @@ def get_todoist_token(email: str) -> str:
     config.read(config_path)
     if email in config["TODOIST_KEY_BY_EMAIL"]:
         return config["TODOIST_KEY_BY_EMAIL"][email]
-    else:
-        return None
+    return None
 
 
 # Get tasks from Todoist API with 'shame' label using aiohttp
@@ -36,7 +36,7 @@ async def get_shame_tasks(
     params = {"filter": "label:shame"}
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
-        if response.status != 200:
+        if response.status != HTTPStatus.OK:
             logger.error("Failed to retrieve tasks: %s", response.status)
             raise ClientResponseError(
                 request_info=response.request_info,
@@ -48,7 +48,9 @@ async def get_shame_tasks(
 
 
 # Discord bot command to shame the user
-async def shame(interaction: discord.Interaction, user_to_shame: discord.Member):
+async def shame(
+    interaction: discord.Interaction, user_to_shame: discord.Member
+) -> None:
     config.read(config_path)
     # Find the email associated with the user
     email = next(
