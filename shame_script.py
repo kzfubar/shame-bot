@@ -162,12 +162,14 @@ async def paginate_message_send(
 async def fetch_and_send_tasks() -> None:
     label_name = "exclude"  # Replace with your desired label
 
-    channel: discord.TextChannel = bot.get_channel(CHANNEL_ID)  # type: ignore
+    channel: discord.TextChannel = bot.get_channel(load_config().discord.channel_id)  # type: ignore
     if not channel:
         logger.error("Channel not found")
         return
 
-    logger.info("Fetching and sending tasks for channel: %d", CHANNEL_ID)
+    logger.info(
+        "Fetching and sending tasks for channel: %d", load_config().discord.channel_id
+    )
 
     message_content = ["**Daily Task Readout**"]
 
