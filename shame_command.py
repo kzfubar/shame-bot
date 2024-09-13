@@ -33,7 +33,7 @@ async def get_shame_tasks(
     todoist_token: str, session: aiohttp.ClientSession
 ) -> List[Task]:
     headers = {"Authorization": f"Bearer {todoist_token}"}
-    params = {"filter": "label:shame & (today | overdue)"}
+    params = {"filter": "label:shame & (today | overdue) & (!assigned | assigned to: me)"}
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
         if response.status != HTTPStatus.OK:
