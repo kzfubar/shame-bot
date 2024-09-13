@@ -1,60 +1,25 @@
 import asyncio
-import configparser
 import logging
 import re
-import sys
-from pathlib import Path
 from typing import Callable, Optional
 
 import discord
 from discord.ext import commands
 
+from utils.Config import load_config
+from utils.Database import EmailClaimedError, add_discord_to_user, discord_id_exists
+
 logger = logging.getLogger(__name__)
 
 ONE_MINUTE = 60
 SIGNUP_TIMEOUT = ONE_MINUTE * 10
-
-# Read the settings.cfg file
-config_path = Path(__file__).parent / "settings.cfg"
-config = configparser.ConfigParser()
-config.read(config_path)
-
-# Add sections to config if they are missing
-if "DISCORD_ID_BY_EMAIL" not in config:
-    config["TODOIST_KEY_BY_EMAIL"] = {}
-
-if "DISCORD_ID_BY_EMAIL" not in config:
-    config["DISCORD_ID_BY_EMAIL"] = {}
-
-with Path.open(config_path, "w", encoding="utf-8") as configfile:
-    config.write(configfile)
-
-# Load the Discord bot token and channel ID from the config file
-try:
-    DISCORD_TOKEN = config.get("DISCORD", "TOKEN")
-    CHANNEL_ID = config.getint("DISCORD", "CHANNEL_ID")
-    SERVER_ID = config.getint("DISCORD", "SERVER_ID")
-    LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
-except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    logger.exception("Discord config set incorrectly")
-    sys.exit()
-
-try:
-    TODOIST_LINK = config.get("TODOIST_AUTH", "APP_LINK")
-except (configparser.NoSectionError, configparser.NoOptionError) as _:
-    logger.exception("Todoist App link not set")
-    sys.exit()
-
 EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
 
 async def signup(
     interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
 ) -> None:
-    config.read(config_path)
-    existing_users = dict(config.items("DISCORD_ID_BY_EMAIL")).values()
-
-    if str(user_to_signup.id) in existing_users:
+    if discord_id_exists(user_to_signup.id):
         await interaction.followup.send(
             f"User {user_to_signup.mention} already signed up"
         )
@@ -119,19 +84,16 @@ async def get_user_email(
 async def check_email_registration(
     user: discord.Member, dm_channel: discord.DMChannel, email: str
 ) -> bool:
-    # pull most recent config data ...should this be a db (yes)?
-    config.read(config_path)
-
-    if email not in dict(config["TODOIST_KEY_BY_EMAIL"]):
-        return False
+    try:
+        if not add_discord_to_user(email, user.id):
+            return False
+    except EmailClaimedError:
+        await dm_channel.send(
+            "This email is already registered, please try with another email"
+        )
 
     await dm_channel.send("Todoist Linking complete!")
     logger.info("added user- user: %s, email: %s", user.name, email)
-    config["DISCORD_ID_BY_EMAIL"][email] = str(user.id)
-
-    with Path.open(config_path, "w") as configfile:
-        config.write(configfile)
-
     return True
 
 
@@ -152,7 +114,7 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
         "\n".join(
             [
                 "Please add the app to todoist and authorize it with the link in settings",
-                f"{TODOIST_LINK}",
+                f"{load_config().todoist.app_link}",
             ]
         )
     )

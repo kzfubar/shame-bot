@@ -1,7 +1,5 @@
-import configparser
 import logging
 from http import HTTPStatus
-from pathlib import Path
 from typing import List
 
 import aiohttp
@@ -9,23 +7,11 @@ import discord
 from aiohttp import ClientResponseError
 
 from Task import Task
+from utils.Database import get_user_by_discord_id
 
 logger = logging.getLogger(__name__)
 
-# Load the config file
-config_path = Path(__file__).parent / "settings.cfg"
-config = configparser.ConfigParser()
-config.read(config_path)
-
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
-
-
-# Retrieve Todoist API Key for the email from the config file
-def get_todoist_token(email: str) -> str:
-    config.read(config_path)
-    if email in config["TODOIST_KEY_BY_EMAIL"]:
-        return config["TODOIST_KEY_BY_EMAIL"][email]
-    return None
 
 
 # Get tasks from Todoist API with 'shame' label using aiohttp
@@ -51,32 +37,15 @@ async def get_shame_tasks(
 async def shame(
     interaction: discord.Interaction, user_to_shame: discord.Member
 ) -> None:
-    config.read(config_path)
-    # Find the email associated with the user
-    email = next(
-        (
-            stored_email
-            for stored_email, discord_id in config["DISCORD_ID_BY_EMAIL"].items()
-            if discord_id == str(user_to_shame.id)
-        ),
-        None,
-    )
+    user = get_user_by_discord_id(user_to_shame.id)
 
-    if email is None:
+    if user is None:
         await interaction.followup.send(f"{user_to_shame.mention} is not signed up!")
-        return
-
-    # Retrieve Todoist token for the email
-    todoist_token = get_todoist_token(email)
-    if todoist_token is None:
-        await interaction.followup.send(
-            f"No Todoist token found for {user_to_shame.mention}!"
-        )
         return
 
     async with aiohttp.ClientSession() as session:
         # Get the tasks with the "shame" label
-        shame_tasks = await get_shame_tasks(todoist_token, session)
+        shame_tasks = await get_shame_tasks(user.todoist_token, session)
 
         if not shame_tasks:
             await interaction.followup.send(

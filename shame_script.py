@@ -1,8 +1,6 @@
-import configparser
 import logging
 from datetime import datetime, time
 from http import HTTPStatus
-from pathlib import Path
 from typing import List
 
 import aiohttp
@@ -14,20 +12,11 @@ from discord_signup import signup
 from log_setup import trace_config
 from shame_command import shame
 from Task import Label, Task
+from utils.Config import load_config
+from utils.Database import get_users
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
-
-# Read the settings.cfg file
-config_path = Path(__file__).parent / "settings.cfg"
-config = configparser.ConfigParser()
-config.read(config_path)
-
-# Load the Discord bot token and channel ID from the config file
-DISCORD_TOKEN = config.get("DISCORD", "TOKEN")
-CHANNEL_ID = config.getint("DISCORD", "CHANNEL_ID")
-SERVER_ID = config.getint("DISCORD", "SERVER_ID")
-LAST_ONLINE = config.get("DISCORD", "LAST_ONLINE", fallback=None)
 
 TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
@@ -182,23 +171,20 @@ async def fetch_and_send_tasks() -> None:
 
     message_content = ["**Daily Task Readout**"]
 
-    # Load keys from the config file
-    todoist_key_by_email = dict(config.items("TODOIST_KEY_BY_EMAIL"))
-    discord_id_by_email = dict(config.items("DISCORD_ID_BY_EMAIL"))
+    users = get_users()
 
     async with aiohttp.ClientSession(trace_configs=[trace_config]) as session:
-        for user_email, api_token in todoist_key_by_email.items():
-            logger.info("Processing tasks for user: %s", user_email)
-            discord_id = int(discord_id_by_email[user_email])
+        for user in users:
+            logger.info("Processing tasks for user: %s", user.email)
 
-            task_list = await get_tasks(api_token, label_name, session)
-            discord_user = await bot.fetch_user(discord_id)
+            task_list = await get_tasks(user.todoist_token, label_name, session)
+            discord_user = await bot.fetch_user(user.discord_id)
 
             if not task_list:
                 message_content.append(f"{discord_user.mention} Completed all tasks")
                 continue
 
-            await add_label(task_list, api_token, "shame", session)
+            await add_label(task_list, user.todoist_token, "shame", session)
 
             task_count = len(task_list)
             if task_count > TASK_TABLE_LIMIT:
@@ -277,4 +263,5 @@ async def shame_passthrough(
         )
 
 
-bot.run(DISCORD_TOKEN, log_handler=None)
+config = load_config()
+bot.run(config.discord.token, log_handler=None)
