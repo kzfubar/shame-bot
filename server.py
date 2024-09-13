@@ -1,27 +1,22 @@
-import configparser
 import logging
 from http import HTTPStatus
-from pathlib import Path
 
 import requests
 from aiohttp import ClientError
 from flask import Flask, Response, jsonify, request
 from todoist_api_python.api import TodoistAPI
 
-app = Flask(__name__)
-# Load configuration from the settings.cfg file
-config_path = Path(__file__).parent / "settings.cfg"
-config = configparser.ConfigParser()
-config.read(config_path)
+from utils.Config import load_config
+from utils.Database import User, add_user, get_user_by_todoist_id
 
+app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 
 @app.route("/connect", methods=["POST"])
 def connect() -> tuple[Response, int]:
-    client_id = config["TODOIST_AUTH"]["CLIENT_ID"]
-    redirect_uri = config["TODOIST_AUTH"]["REDIRECT_URI"]
-    auth_url = f"https://todoist.com/oauth/authorize?client_id={client_id}&scope=data:read_write&state=yoink&redirect_uri={redirect_uri}"
+    config = load_config().todoist
+    auth_url = f"https://todoist.com/oauth/authorize?client_id={config.client_id}&scope=data:read_write&state=yoink&redirect_uri={config.redirect_uri}"
     return jsonify(
         {
             "card": {
@@ -41,8 +36,10 @@ def webhook() -> tuple[str, int]:
         if data["event_name"] == "item:completed":
             task_id = data["event_data"]["id"]
             user_id = data["event_data"]["user_id"]
-            token = get_auth_token(user_id)
-            clear_shame(token, task_id)
+            user = get_user_by_todoist_id(user_id)
+            if not user:
+                return "", HTTPStatus.BAD_REQUEST
+            clear_shame(user.todoist_token, task_id)
     except Exception:
         logger.exception("Error processing webhook")
         return "", HTTPStatus.INTERNAL_SERVER_ERROR
@@ -57,23 +54,20 @@ def auth() -> tuple[str, int]:
     access_token = exchange_code_for_token(code)
     user_id, user_email = get_user_info_from_todoist(access_token)
     if user_id and user_email:
-        add_user_info_to_config(user_id, user_email, access_token)
+        add_user(User(email=user_email, todoist_id=user_id, todoist_token=access_token))
     return "Success", HTTPStatus.OK
 
 
 def exchange_code_for_token(code: str) -> str:
-    client_id = config["TODOIST_AUTH"]["CLIENT_ID"]
-    client_secret = config["TODOIST_AUTH"]["CLIENT_SECRET"]
-    redirect_uri = config["TODOIST_AUTH"]["REDIRECT_URI"]
-    token_url = config["TODOIST_AUTH"]["TOKEN_URL"]
+    config = load_config().todoist
 
     response = requests.post(
-        token_url,
+        config.token_url,
         data={
-            "client_id": client_id,
-            "client_secret": client_secret,
+            "client_id": config.client_id,
+            "client_secret": config.client_secret,
             "code": code,
-            "redirect_uri": redirect_uri,
+            "redirect_uri": config.redirect_uri,
         },
         timeout=10,
     )
@@ -97,39 +91,6 @@ def get_user_info_from_todoist(access_token: str) -> tuple[str, str]:
         user_email = user_info.get("email")
         return user_id, user_email
     raise ClientError
-
-
-def add_user_info_to_config(user_id: str, user_email: str, access_token: str) -> None:
-    if "TODOIST_KEY_BY_EMAIL" not in config:
-        config["TODOIST_KEY_BY_EMAIL"] = {}
-    config["TODOIST_KEY_BY_EMAIL"][user_email] = access_token
-
-    if "EMAIL_BY_TODOIST_ID" not in config:
-        config["EMAIL_BY_TODOIST_ID"] = {}
-    config["EMAIL_BY_TODOIST_ID"][user_id] = user_email
-
-    with Path.open(config_path, "w", encoding="utf-8") as configfile:
-        config.write(configfile)
-
-
-def get_auth_token(user_id: int) -> str:
-    # Check if the user ID exists in the config
-    if str(user_id) in config["EMAIL_BY_TODOIST_ID"]:
-        user_email = config["EMAIL_BY_TODOIST_ID"][str(user_id)]
-        return config["TODOIST_KEY_BY_EMAIL"][str(user_email)]
-    # Redirect to the Todoist OAuth authorization page
-    msg = f"No token found for user_id: {user_id}"
-    raise ValueError(msg)
-
-
-def get_todoist_token(user_id: str) -> str:
-    # Retrieve the token using the user_id from the appropriate section
-    token = config["TODOIST_KEY_BY_EMAIL"].get(user_id)
-    if not token:
-        msg = f"No token found for user_id: {user_id}"
-        raise ValueError(msg)
-
-    return token
 
 
 def clear_shame(token: str, completed_task_id: str) -> None:

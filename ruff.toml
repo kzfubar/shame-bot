@@ -4,7 +4,11 @@ show-fixes = true
 [lint]
 # https://docs.astral.sh/ruff/rules/
 select = ["E1", "E2", "E3", "E4", "E7", "F", "W", "I", "N", "UP", "B", "A", "C4", "T10", "ICN", "LOG", "PIE", "T20", "PYI", "PT", "Q", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "ARG", "FIX", "ERA", "PLC", "PLE", "R", "PLW", "PERF", "FURB", "ANN", "ASYNC", "S", "G", "PTH", "PL", "TRY", "RUF"]
-ignore = ["S101", "EM101"]
+ignore = [
+    "S101",     # asserts are used in testing
+    "EM101",    # I think messages inside of exceptions are fine?
+    "TRY003",   # ""
+    ]
 preview = true
 
 [lint.flake8-annotations]

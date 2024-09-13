@@ -5,3 +5,5 @@ aiohttp
 flask
 todoist_api_python
 requests
+sqlalchemy
+sqlalchemy-stubs
