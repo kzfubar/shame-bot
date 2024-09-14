@@ -9,7 +9,7 @@ from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
 
 from discord_signup import signup
-from log_setup import trace_config
+from log_setup import log_setup, trace_config
 from shame_command import shame
 from Task import Label, Task
 from utils.Config import load_config
@@ -265,5 +265,7 @@ async def shame_passthrough(
         )
 
 
-config = load_config()
-bot.run(config.discord.token, log_handler=None)
+if __name__ == "__main__":
+    log_setup()
+    config = load_config()
+    bot.run(config.discord.token, log_handler=None)

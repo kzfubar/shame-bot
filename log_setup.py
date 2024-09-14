@@ -33,34 +33,34 @@ class ColorFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-# Create log directory if it doesn't exist
-log_directory = "log"
-if not Path(log_directory).exists:
-    Path(log_directory).mkdir(parents=True)
+def log_setup() -> None:
+    # Create log directory if it doesn't exist
+    log_directory = "log"
+    if not Path(log_directory).exists:
+        Path(log_directory).mkdir(parents=True)
 
+    # change the behavior of the root logger so all other loggers inherit this behavior
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
 
-# change the behavior of the root logger so all other loggers inherit this behavior
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
+    # Set up handlers (applies to all loggers unless overridden)
+    log_file_path = Path(log_directory) / "shamebot.log"
+    file_handler = TimedRotatingFileHandler(
+        log_file_path, when="midnight", interval=1, backupCount=7, utc=True
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT, style="{"))
 
-# Set up handlers (applies to all loggers unless overridden)
-log_file_path = Path(log_directory) / "shamebot.log"
-file_handler = TimedRotatingFileHandler(
-    log_file_path, when="midnight", interval=1, backupCount=7, utc=True
-)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT, style="{"))
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setFormatter(ColorFormatter(style="{"))
 
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
-stream_handler.setFormatter(ColorFormatter(style="{"))
+    # Add handlers to the root logger
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(stream_handler)
 
-# Add handlers to the root logger
-root_logger.addHandler(file_handler)
-root_logger.addHandler(stream_handler)
 
 request_logger = logging.getLogger("aiohttp")
-
 trace_config = aiohttp.TraceConfig()
 
 

@@ -6,6 +6,7 @@ import aiohttp
 import discord
 from aiohttp import ClientResponseError
 
+from log_setup import trace_config
 from Task import Task
 from utils.Database import get_user_by_discord_id
 
@@ -45,7 +46,7 @@ async def shame(
         await interaction.followup.send(f"{user_to_shame.mention} is not signed up!")
         return
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(trace_configs=[trace_config]) as session:
         # Get the tasks with the "shame" label
         shame_tasks = await get_shame_tasks(user.todoist_token, session)
 
