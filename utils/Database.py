@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 from typing import Callable, Concatenate, ParamSpec, Sequence, TypeVar
 
-from sqlalchemy import Column, Integer, String, create_engine, select
+from sqlalchemy import Integer, String, create_engine, select
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,10 @@ class EmailClaimedError(Exception):
 
 class User(Base):
     __tablename__ = "users"
-    email = Column(String, primary_key=True)
-    discord_id = Column(Integer, nullable=True)
-    todoist_id = Column(String)
-    todoist_token = Column(String)
+    email = mapped_column(String, primary_key=True)
+    discord_id = mapped_column(Integer, nullable=True)
+    todoist_id = mapped_column(String)
+    todoist_token = mapped_column(String)
 
     def __repr__(self) -> str:
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
@@ -72,7 +72,6 @@ def load_db() -> sessionmaker:
 
     engine = create_engine(f"sqlite:///{db_path}")
     Base.metadata.create_all(engine)
-
     global _session_maker  # noqa: PLW0603
     _session_maker = sessionmaker(bind=engine)
 
@@ -88,78 +87,67 @@ P = ParamSpec("P")
 
 
 def validate_db[T, **P](
-    db_function: Callable[Concatenate[sessionmaker, P], T],
+    db_function: Callable[Concatenate[Session, P], T],
 ) -> Callable[P, T]:
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        return db_function(_session_maker or load_db(), *args, **kwargs)
+        session_maker = _session_maker or load_db()
+        with session_maker() as session:
+            return db_function(session, *args, **kwargs)
 
     return wrapper
 
 
 @validate_db
-def get_users(session_maker: sessionmaker) -> Sequence[User]:
-    with session_maker() as session:
-        return session.scalars(select(User)).all()
+def get_users(session: Session) -> Sequence[User]:
+    return session.execute(select(User)).scalars().all()
 
 
 @validate_db
-def add_discord_to_user(
-    session_maker: sessionmaker, email: str, discord_id: int
-) -> bool:
-    with session_maker() as session:
-        user = session.execute(
-            select(User).where(User.email == email)
-        ).scalar_one_or_none()
+def add_discord_to_user(session: Session, email: str, discord_id: int) -> bool:
+    user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
 
-        if not user:
-            return False
+    if not user:
+        return False
 
-        if user.discord_id is not None:
-            raise EmailClaimedError
+    if user.discord_id is not None:
+        raise EmailClaimedError
 
-        user.discord_id = discord_id
-        session.commit()
+    user.discord_id = discord_id
+    session.commit()
 
-        return True
+    return True
 
 
 @validate_db
-def get_user_by_discord_id(session_maker: sessionmaker, discord_id: int) -> User | None:
-    with session_maker() as session:
-        return session.execute(
+def get_user_by_discord_id(session: Session, discord_id: int) -> User | None:
+    return session.execute(
+        select(User).where(User.discord_id == discord_id)
+    ).scalar_one_or_none()
+
+
+@validate_db
+def discord_id_exists(session: Session, discord_id: int) -> bool:
+    return (
+        session.execute(
             select(User).where(User.discord_id == discord_id)
         ).scalar_one_or_none()
+        is not None
+    )
 
 
 @validate_db
-def discord_id_exists(session_maker: sessionmaker, discord_id: int) -> bool:
-    with session_maker() as session:
-        return (
-            session.execute(
-                select(User).where(User.discord_id == discord_id)
-            ).scalar_one_or_none()
-            is not None
-        )
+def add_user(session: Session, user: User) -> None:
+    session.add(user)
+    session.commit()
 
 
 @validate_db
-def add_user(session_maker: sessionmaker, user: User) -> None:
-    with session_maker() as session:
-        session.add(user)
-        session.commit()
+def get_user_by_email(session: Session, email: str) -> User | None:
+    return session.execute(select(User).where(User.email == email)).scalar_one_or_none()
 
 
 @validate_db
-def get_user_by_email(session_maker: sessionmaker, email: str) -> User | None:
-    with session_maker() as session:
-        return session.execute(
-            select(User).where(User.email == email)
-        ).scalar_one_or_none()
-
-
-@validate_db
-def get_user_by_todoist_id(session_maker: sessionmaker, todoist_id: str) -> User | None:
-    with session_maker() as session:
-        return session.execute(
-            select(User).where(User.todoist_id == todoist_id)
-        ).scalar_one_or_none()
+def get_user_by_todoist_id(session: Session, todoist_id: str) -> User | None:
+    return session.execute(
+        select(User).where(User.todoist_id == todoist_id)
+    ).scalar_one_or_none()

@@ -5,9 +5,9 @@ from typing import List
 import aiohttp
 import discord
 from aiohttp import ClientResponseError
+from todoist_api_python.models import Task
 
 from log_setup import trace_config
-from Task import Task
 from utils.Database import get_user_by_discord_id
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,8 @@ async def get_shame_tasks(
                 status=response.status,
                 message=f"Failed to retrieve tasks: {response.status}",
             )
-        return await response.json()
+        res = await response.json()
+        return [Task.from_dict(task) for task in res]
 
 
 # Discord bot command to shame the user
@@ -56,7 +57,7 @@ async def shame(
             )
             return
 
-        task_list = "\n".join([task["content"] for task in shame_tasks])
+        task_list = "\n".join([task.content for task in shame_tasks])
         await interaction.followup.send(
             f"For shame {user_to_shame.mention}!\n{task_list}"
         )

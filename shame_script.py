@@ -7,11 +7,11 @@ import aiohttp
 import discord
 from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
+from todoist_api_python.models import Label, Task
 
 from discord_signup import signup
 from log_setup import log_setup, trace_config
 from shame_command import shame
-from Task import Label, Task
 from utils.Config import load_config
 from utils.Database import get_users
 
@@ -45,7 +45,8 @@ async def get_tasks(
     params = {"filter": f"(today | overdue) & !@{label_name}"}
     async with session.get(TODOIST_API, params=params, headers=headers) as response:
         logger.debug("Request from todoist")
-        return await response.json()
+        res = await response.json()
+        return [Task.from_dict(task) for task in res]
 
 
 async def add_label(
@@ -63,11 +64,11 @@ async def add_label(
     async with session.get(
         "https://api.todoist.com/rest/v2/labels", headers=headers
     ) as labels_response:
-        labels: List[Label] = await labels_response.json()
+        res = await labels_response.json()
 
-    label_id = next(
-        (label["id"] for label in labels if label["name"] == label_name), None
-    )
+    labels = [Label.from_dict(label) for label in res]
+
+    label_id = next((label.id for label in labels if label.name == label_name), None)
 
     if label_id is None:
         # Create the label if it does not exist
@@ -89,8 +90,8 @@ async def add_label(
                 return
 
     for task in task_list:
-        task_id = task.get("id", 0)
-        task_labels = task.get("labels", [])
+        task_id = task.id
+        task_labels = task.labels or []
         if label_name in labels:
             continue
 
@@ -162,14 +163,15 @@ async def paginate_message_send(
 async def fetch_and_send_tasks() -> None:
     label_name = "exclude"  # Replace with your desired label
 
-    channel: discord.TextChannel = bot.get_channel(load_config().discord.channel_id)  # type: ignore
+    channel = bot.get_channel(load_config().discord.channel_id)
     if not channel:
         logger.error("Channel not found")
         return
 
-    logger.info(
-        "Fetching and sending tasks for channel: %d", load_config().discord.channel_id
-    )
+    if not isinstance(channel, discord.TextChannel):
+        raise TypeError("Incorrect channel type")
+
+    logger.info("Fetching and sending tasks for channel: %d", config.discord.channel_id)
 
     message_content = ["**Daily Task Readout**"]
 
@@ -188,31 +190,33 @@ async def fetch_and_send_tasks() -> None:
 
             await add_label(task_list, user.todoist_token, "shame", session)
 
+            task_table = [
+                [
+                    string_shorten(task.content, TASK_MAX_LENGTH),
+                    string_shorten(
+                        task.due.string if task.due else "", INTERVAL_MAX_LENGTH
+                    ),
+                ]
+                for task in task_list
+            ]
             task_count = len(task_list)
+
             if task_count > TASK_TABLE_LIMIT:
                 # subtract 1 from the task limit to leave room for the "more tasks" line
-                task_list = task_list[: TASK_TABLE_LIMIT - 1]
-                task_list.append(
-                    {
-                        "content": f"...{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)"
-                    }
+                task_table = task_table[: TASK_TABLE_LIMIT - 1]
+                task_table.append(
+                    [f"{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)", ""]
                 )
+
             table = table2ascii(
                 header=["Task", "Due"],
-                body=[
-                    [
-                        string_shorten(task.get("content", ""), TASK_MAX_LENGTH),
-                        string_shorten(
-                            task.get("due", {}).get("string", ""), INTERVAL_MAX_LENGTH
-                        ),
-                    ]
-                    for task in task_list
-                ],
+                body=task_table,
                 style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
                 alignments=Alignment.LEFT,
                 # extra is added for the required padding
                 column_widths=[TASK_MAX_LENGTH + 2, INTERVAL_MAX_LENGTH + 2],
             )
+
             message_content.append(
                 f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
             )
