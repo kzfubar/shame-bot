@@ -27,3 +27,5 @@ jobs:
         run: ruff format --check
       - name: Lint Check
         run: ruff check
+      - name: Type Check
+        run: pyright
