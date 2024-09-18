@@ -8,6 +8,7 @@ from aiohttp import ClientResponseError
 from todoist_api_python.models import Task
 
 from log_setup import trace_config
+from utils.Constants import OWNED_DUE_TODAY
 from utils.Database import get_user_by_discord_id
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ async def get_shame_tasks(
 ) -> List[Task]:
     headers = {"Authorization": f"Bearer {todoist_token}"}
     params = {
-        "filter": "label:shame & (today | overdue) & (!assigned | assigned to: me)"
+        "filter": f"label:shame & {OWNED_DUE_TODAY}"
     }
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
