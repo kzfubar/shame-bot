@@ -21,9 +21,7 @@ async def get_shame_tasks(
     todoist_token: str, session: aiohttp.ClientSession
 ) -> List[Task]:
     headers = {"Authorization": f"Bearer {todoist_token}"}
-    params = {
-        "filter": f"label:shame & {OWNED_DUE_TODAY}"
-    }
+    params = {"filter": f"label:shame & {OWNED_DUE_TODAY}"}
 
     async with session.get(TODOIST_API, headers=headers, params=params) as response:
         if response.status != HTTPStatus.OK:
