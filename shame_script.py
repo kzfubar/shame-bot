@@ -13,6 +13,7 @@ from discord_signup import signup
 from log_setup import log_setup, trace_config
 from shame_command import shame
 from utils.Config import load_config
+from utils.Constants import OWNED_DUE_TODAY
 from utils.Database import get_users
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ async def get_tasks(
     headers = {"Authorization": f"Bearer {api_token}"}
 
     # Get all tasks
-    params = {"filter": f"(today | overdue) & !@{label_name}"}
+    params = {"filter": f"{OWNED_DUE_TODAY} & !@{label_name}"}
     async with session.get(TODOIST_API, params=params, headers=headers) as response:
         logger.debug("Request from todoist")
         res = await response.json()
