@@ -14,7 +14,7 @@ from log_setup import log_setup, trace_config
 from shame_command import shame
 from utils.Config import load_config
 from utils.Constants import OWNED_DUE_TODAY
-from utils.Database import get_users
+from utils.Database import get_session, get_users
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
@@ -176,51 +176,55 @@ async def fetch_and_send_tasks() -> None:
 
     message_content = ["**Daily Task Readout**"]
 
-    users = get_users()
+    async with aiohttp.ClientSession(trace_configs=[trace_config]) as client_session:
+        with get_session() as database_session:
+            users = get_users(database_session)
+            for user in users:
+                logger.info("Processing tasks for user: %s", user.email)
 
-    async with aiohttp.ClientSession(trace_configs=[trace_config]) as session:
-        for user in users:
-            logger.info("Processing tasks for user: %s", user.email)
+                task_list = await get_tasks(
+                    user.todoist_token, label_name, client_session
+                )
+                discord_user = await bot.fetch_user(user.discord_id)
 
-            task_list = await get_tasks(user.todoist_token, label_name, session)
-            discord_user = await bot.fetch_user(user.discord_id)
+                if not task_list:
+                    message_content.append(
+                        f"{discord_user.mention} Completed all tasks"
+                    )
+                    continue
 
-            if not task_list:
-                message_content.append(f"{discord_user.mention} Completed all tasks")
-                continue
+                await add_label(task_list, user.todoist_token, "shame", client_session)
 
-            await add_label(task_list, user.todoist_token, "shame", session)
-
-            task_table = [
-                [
-                    string_shorten(task.content, TASK_MAX_LENGTH),
-                    string_shorten(
-                        task.due.string if task.due else "", INTERVAL_MAX_LENGTH
-                    ),
+                task_table = [
+                    [
+                        string_shorten(task.content, TASK_MAX_LENGTH),
+                        string_shorten(
+                            task.due.string if task.due else "", INTERVAL_MAX_LENGTH
+                        ),
+                    ]
+                    for task in task_list
                 ]
-                for task in task_list
-            ]
-            task_count = len(task_list)
+                task_count = len(task_list)
 
-            if task_count > TASK_TABLE_LIMIT:
-                # subtract 1 from the task limit to leave room for the "more tasks" line
-                task_table = task_table[: TASK_TABLE_LIMIT - 1]
-                task_table.append(
-                    [f"{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)", ""]
+                if task_count > TASK_TABLE_LIMIT:
+                    # subtract 1 from the task limit to leave room for the "more tasks" line
+                    task_table = task_table[: TASK_TABLE_LIMIT - 1]
+                    task_table.append(
+                        [f"{task_count - (TASK_TABLE_LIMIT - 1)} more task(s)", ""]
+                    )
+
+                table = table2ascii(
+                    header=["Task", "Due"],
+                    body=task_table,
+                    style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
+                    alignments=Alignment.LEFT,
+                    # extra is added for the required padding
+                    column_widths=[TASK_MAX_LENGTH + 2, INTERVAL_MAX_LENGTH + 2],
                 )
 
-            table = table2ascii(
-                header=["Task", "Due"],
-                body=task_table,
-                style=TableStyle.from_string("┏━┳┳┓┃┃┃┣━╋╋┫     ┗┻┻┛  ┳┻  ┳┻"),
-                alignments=Alignment.LEFT,
-                # extra is added for the required padding
-                column_widths=[TASK_MAX_LENGTH + 2, INTERVAL_MAX_LENGTH + 2],
-            )
-
-            message_content.append(
-                f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
-            )
+                message_content.append(
+                    f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
+                )
 
     await paginate_message_send(channel, message_content)
 

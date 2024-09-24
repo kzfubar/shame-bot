@@ -5,9 +5,15 @@ from typing import Callable, Optional
 
 import discord
 from discord.ext import commands
+from sqlalchemy.orm import Session
 
 from utils.Config import load_config
-from utils.Database import EmailClaimedError, add_discord_to_user, discord_id_exists
+from utils.Database import (
+    EmailClaimedError,
+    add_discord_to_user,
+    discord_id_exists,
+    get_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +25,14 @@ EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 async def signup(
     interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
 ) -> None:
-    if discord_id_exists(user_to_signup.id):
-        await interaction.followup.send(
-            f"User {user_to_signup.mention} already signed up"
-        )
-        return
-
-    await interaction.followup.send(f"Sent {user_to_signup.mention} dm to register")
-    await add_user(user_to_signup, bot)
+    with get_session() as session:
+        if discord_id_exists(session=session, discord_id=user_to_signup.id):
+            await interaction.followup.send(
+                f"User {user_to_signup.mention} already signed up"
+            )
+            return
+        await interaction.followup.send(f"Sent {user_to_signup.mention} dm to register")
+        await add_user(session, user_to_signup, bot)
 
 
 def create_message_filter(
@@ -82,10 +88,10 @@ async def get_user_email(
 
 
 async def check_email_registration(
-    user: discord.Member, dm_channel: discord.DMChannel, email: str
+    session: Session, user: discord.Member, dm_channel: discord.DMChannel, email: str
 ) -> bool:
     try:
-        if not add_discord_to_user(email, user.id):
+        if not add_discord_to_user(session, email, user.id):
             return False
     except EmailClaimedError:
         await dm_channel.send(
@@ -97,7 +103,7 @@ async def check_email_registration(
     return True
 
 
-async def add_user(user: discord.Member, bot: commands.Bot) -> None:
+async def add_user(session: Session, user: discord.Member, bot: commands.Bot) -> None:
     dm_channel = await user.create_dm()
 
     email = await get_user_email(user, dm_channel, bot)
@@ -107,7 +113,7 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
 
     logger.info("received email- user: %s, email: %s", user.name, email)
 
-    if await check_email_registration(user, dm_channel, email):
+    if await check_email_registration(session, user, dm_channel, email):
         return
 
     await dm_channel.send(
@@ -140,7 +146,7 @@ async def add_user(user: discord.Member, bot: commands.Bot) -> None:
                 await dm_channel.send("User signup cancelled")
                 return
 
-        if await check_email_registration(user, dm_channel, email):
+        if await check_email_registration(session, user, dm_channel, email):
             return
 
     await dm_channel.send(

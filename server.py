@@ -7,7 +7,7 @@ from flask import Flask, Response, jsonify, request
 from todoist_api_python.api import TodoistAPI
 
 from utils.Config import load_config
-from utils.Database import User, add_user, get_user_by_todoist_id
+from utils.Database import User, add_user, get_session, get_user_by_todoist_id
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -36,10 +36,11 @@ def webhook() -> tuple[str, int]:
         if data["event_name"] == "item:completed":
             task_id = data["event_data"]["id"]
             user_id = data["event_data"]["user_id"]
-            user = get_user_by_todoist_id(user_id)
-            if not user:
-                return "", HTTPStatus.BAD_REQUEST
-            clear_shame(user.todoist_token, task_id)
+            with get_session() as session:
+                user = get_user_by_todoist_id(session=session, todoist_id=user_id)
+                if not user:
+                    return "", HTTPStatus.BAD_REQUEST
+                clear_shame(user.todoist_token, task_id)
     except Exception:
         logger.exception("Error processing webhook")
         return "", HTTPStatus.INTERNAL_SERVER_ERROR
@@ -53,8 +54,14 @@ def auth() -> tuple[str, int]:
         return "No code provided", HTTPStatus.BAD_REQUEST
     access_token = exchange_code_for_token(code)
     user_id, user_email = get_user_info_from_todoist(access_token)
-    if user_id and user_email:
-        add_user(User(email=user_email, todoist_id=user_id, todoist_token=access_token))
+    with get_session() as session:
+        if user_id and user_email:
+            add_user(
+                session=session,
+                user=User(
+                    email=user_email, todoist_id=user_id, todoist_token=access_token
+                ),
+            )
     return "Success", HTTPStatus.OK
 
 

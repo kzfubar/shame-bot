@@ -9,7 +9,7 @@ from todoist_api_python.models import Task
 
 from log_setup import trace_config
 from utils.Constants import OWNED_DUE_TODAY
-from utils.Database import get_user_by_discord_id
+from utils.Database import get_session, get_user_by_discord_id
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +40,17 @@ async def get_shame_tasks(
 async def shame(
     interaction: discord.Interaction, user_to_shame: discord.Member
 ) -> None:
-    user = get_user_by_discord_id(user_to_shame.id)
+    async with aiohttp.ClientSession(trace_configs=[trace_config]) as client_session:
+        with get_session() as session:
+            user = get_user_by_discord_id(session=session, discord_id=user_to_shame.id)
 
-    if user is None:
-        await interaction.followup.send(f"{user_to_shame.mention} is not signed up!")
-        return
-
-    async with aiohttp.ClientSession(trace_configs=[trace_config]) as session:
+        if user is None:
+            await interaction.followup.send(
+                f"{user_to_shame.mention} is not signed up!"
+            )
+            return
         # Get the tasks with the "shame" label
-        shame_tasks = await get_shame_tasks(user.todoist_token, session)
+        shame_tasks = await get_shame_tasks(user.todoist_token, client_session)
 
         if not shame_tasks:
             await interaction.followup.send(
