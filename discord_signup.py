@@ -7,7 +7,12 @@ import discord
 from discord.ext import commands
 
 from utils.Config import load_config
-from utils.Database import EmailClaimedError, add_discord_to_user, discord_id_exists
+from utils.Database import (
+    EmailClaimedError,
+    add_discord_to_user,
+    discord_id_exists,
+    get_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +24,12 @@ EMAIL_REGEX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 async def signup(
     interaction: discord.Interaction, user_to_signup: discord.Member, bot: commands.Bot
 ) -> None:
-    if discord_id_exists(user_to_signup.id):
-        await interaction.followup.send(
-            f"User {user_to_signup.mention} already signed up"
-        )
-        return
+    with get_session() as session:
+        if discord_id_exists(session=session, discord_id=user_to_signup.id):
+            await interaction.followup.send(
+                f"User {user_to_signup.mention} already signed up"
+            )
+            return
 
     await interaction.followup.send(f"Sent {user_to_signup.mention} dm to register")
     await add_user(user_to_signup, bot)
@@ -85,8 +91,11 @@ async def check_email_registration(
     user: discord.Member, dm_channel: discord.DMChannel, email: str
 ) -> bool:
     try:
-        if not add_discord_to_user(email, user.id):
-            return False
+        with get_session() as session:
+            if not add_discord_to_user(
+                session=session, email=email, discord_id=user.id
+            ):
+                return False
     except EmailClaimedError:
         await dm_channel.send(
             "This email is already registered, please try with another email"
