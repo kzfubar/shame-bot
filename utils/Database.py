@@ -4,16 +4,16 @@ from pathlib import Path
 from typing import ParamSpec, Sequence, TypeVar
 
 from sqlalchemy import Integer, String, create_engine, select
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, mapped_column, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
 
 
-Base = declarative_base()
-
-
 class EmailClaimedError(Exception):
+    pass
+
+
+class Base(DeclarativeBase):
     pass
 
 
@@ -28,13 +28,12 @@ class User(Base):
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
 
 
-_session_maker: sessionmaker | None = None
+_session_maker: sessionmaker[Session] | None = None
 
 
-def load_db() -> sessionmaker:
+def load_db() -> sessionmaker[Session]:
     logger.info("Loading database")
     db_path = Path(__file__).parent.parent / "data" / "database.sqlite"
-    migrated_users = []
 
     if not db_path.exists():
         logger.info("Creating database at %s", db_path)
@@ -48,10 +47,6 @@ def load_db() -> sessionmaker:
     global _session_maker  # noqa: PLW0603
     _session_maker = sessionmaker(bind=engine)
 
-    if migrated_users:
-        with _session_maker() as session:
-            session.add_all(migrated_users)
-            session.commit()
     return _session_maker
 
 
@@ -78,7 +73,6 @@ def add_discord_to_user(session: Session, email: str, discord_id: int) -> bool:
         raise EmailClaimedError
 
     user.discord_id = discord_id
-    session.commit()
 
     return True
 
@@ -100,7 +94,6 @@ def discord_id_exists(session: Session, discord_id: int) -> bool:
 
 def add_user(session: Session, user: User) -> None:
     session.add(user)
-    session.commit()
 
 
 def get_user_by_email(session: Session, email: str) -> User | None:
