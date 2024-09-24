@@ -3,8 +3,8 @@ import logging
 from pathlib import Path
 from typing import ParamSpec, Sequence, TypeVar
 
-from sqlalchemy import Integer, String, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Session, mapped_column, sessionmaker
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,10 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
-    email = mapped_column(String, primary_key=True)
-    discord_id = mapped_column(Integer, nullable=True)
-    todoist_id = mapped_column(String)
-    todoist_token = mapped_column(String)
+    email: Mapped[str] = mapped_column(primary_key=True)
+    discord_id: Mapped[int] | None = mapped_column()
+    todoist_id: Mapped[str] = mapped_column()
+    todoist_token: Mapped[str] = mapped_column()
 
     def __repr__(self) -> str:
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
