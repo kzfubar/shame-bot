@@ -91,7 +91,7 @@ async def check_email_registration(
     session: Session, user: discord.Member, dm_channel: discord.DMChannel, email: str
 ) -> bool:
     try:
-        if not add_discord_to_user(session=session, email=email, discord_id=user.id):
+        if not add_discord_to_user(session, email, user.id):
             return False
     except EmailClaimedError:
         await dm_channel.send(
