@@ -185,6 +185,10 @@ async def fetch_and_send_tasks() -> None:
                 task_list = await get_tasks(
                     user.todoist_token, label_name, client_session
                 )
+
+                if not user.discord_id:
+                    continue
+
                 discord_user = await bot.fetch_user(user.discord_id)
 
                 if not task_list:
