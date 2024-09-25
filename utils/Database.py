@@ -20,7 +20,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
     email: Mapped[str] = mapped_column(primary_key=True)
-    discord_id: Mapped[int] | None = mapped_column()
+    discord_id: Mapped[int | None] = mapped_column()
     todoist_id: Mapped[str] = mapped_column()
     todoist_token: Mapped[str] = mapped_column()
 
