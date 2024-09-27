@@ -7,6 +7,7 @@ from flask import Flask, Response, jsonify, request
 from todoist_api_python.api import TodoistAPI
 
 from utils.Config import load_config
+from utils.Constants import SHAME_LABEL
 from utils.Database import User, add_user, get_session, get_user_by_todoist_id
 
 app = Flask(__name__)
@@ -107,7 +108,7 @@ def clear_shame(token: str, completed_task_id: str) -> None:
         if task is None or task.labels is None:
             return
 
-        updated_labels = [label for label in task.labels if label != "shame"]
+        updated_labels = [label for label in task.labels if label != SHAME_LABEL]
         success = api.update_task(task_id=completed_task_id, labels=updated_labels)
 
         if success:
