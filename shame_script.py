@@ -1,25 +1,23 @@
 import logging
 from datetime import datetime, time
-from http import HTTPStatus
 from typing import List
 
 import aiohttp
 import discord
 from discord.ext import commands, tasks
 from table2ascii import Alignment, TableStyle, table2ascii
-from todoist_api_python.models import Label, Task
 
 from discord_signup import signup
 from log_setup import log_setup, trace_config
 from shame_command import shame
+from todoist.rest import add_label, get_tasks
+from todoist.types import Filter
 from utils.Config import load_config
-from utils.Constants import OWNED_DUE_TODAY
+from utils.Constants import DUE_TODAY
 from utils.Database import get_session, get_users
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
-
-TODOIST_API = "https://api.todoist.com/rest/v2/tasks"
 
 SCHEDULED_UTC_POST_TIME = time(hour=2)
 
@@ -34,84 +32,6 @@ async def safe_send(channel: discord.TextChannel, message: str) -> discord.Messa
     if len(message) > DISCORD_MESSAGE_LIMIT:
         safe_message = message[:DISCORD_MESSAGE_LIMIT]
     return await channel.send(safe_message)
-
-
-# Function to get all tasks with a specific label and due today or overdue
-async def get_tasks(
-    api_token: str, label_name: str, session: aiohttp.ClientSession
-) -> List[Task] | None:
-    headers = {"Authorization": f"Bearer {api_token}"}
-
-    # Get all tasks
-    params = {"filter": f"{OWNED_DUE_TODAY} & !@{label_name}"}
-    async with session.get(TODOIST_API, params=params, headers=headers) as response:
-        logger.debug("Request from todoist")
-        res = await response.json()
-        return [Task.from_dict(task) for task in res]
-
-
-async def add_label(
-    task_list: List[Task],
-    api_token: str,
-    label_name: str,
-    session: aiohttp.ClientSession,
-) -> None:
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json",
-    }
-
-    # First, we need to get the ID of the label from the label name
-    async with session.get(
-        "https://api.todoist.com/rest/v2/labels", headers=headers
-    ) as labels_response:
-        res = await labels_response.json()
-
-    labels = [Label.from_dict(label) for label in res]
-
-    label_id = next((label.id for label in labels if label.name == label_name), None)
-
-    if label_id is None:
-        # Create the label if it does not exist
-        async with session.post(
-            "https://api.todoist.com/rest/v2/labels",
-            json={"name": label_name, "color": "lavender"},
-            headers=headers,
-        ) as create_label_response:
-            if create_label_response.status == HTTPStatus.OK:
-                await create_label_response.json()
-                logger.info('Label "%s" created successfully.', label_name)
-            else:
-                logger.info(
-                    'Failed to create label "%s": %d - %s',
-                    label_name,
-                    create_label_response.status,
-                    await create_label_response.text(),
-                )
-                return
-
-    for task in task_list:
-        task_id = task.id
-        task_labels = task.labels or []
-        if label_name in labels:
-            continue
-
-        task_labels.append(label_name)
-        data = {"labels": task_labels}
-
-        # Update the task with the new label
-        async with session.post(
-            f"{TODOIST_API}/{task_id}", json=data, headers=headers
-        ) as update_response:
-            if update_response.status == HTTPStatus.OK:
-                logger.info("Task %s updated successfully.", task_id)
-            else:
-                logger.info(
-                    "Failed to update task %s: %d - %s",
-                    task_id,
-                    update_response.status,
-                    await update_response.text(),
-                )
 
 
 def string_shorten(message: str, max_length: int) -> str:
@@ -136,6 +56,7 @@ async def on_ready() -> None:
     try:
         synced = await bot.tree.sync()
         fetch_and_send_tasks.start()
+        await fetch_and_send_tasks.__call__()
         for command in synced:
             logger.info("Command synced: %s", command.name)
     except Exception:
@@ -183,7 +104,7 @@ async def fetch_and_send_tasks() -> None:
                 logger.info("Processing tasks for user: %s", user.email)
 
                 task_list = await get_tasks(
-                    user.todoist_token, label_name, client_session
+                    client_session, user.todoist_token, DUE_TODAY & ~Filter(label=label_name)
                 )
 
                 if not user.discord_id:
@@ -197,7 +118,7 @@ async def fetch_and_send_tasks() -> None:
                     )
                     continue
 
-                await add_label(task_list, user.todoist_token, "shame", client_session)
+                await add_label(client_session, user.todoist_token, task_list, "shame")
 
                 task_table = [
                     [

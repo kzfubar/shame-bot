@@ -7,3 +7,4 @@ todoist_api_python
 requests
 pyright
 sqlalchemy
+pydantic
