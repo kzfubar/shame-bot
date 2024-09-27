@@ -56,7 +56,6 @@ async def on_ready() -> None:
     try:
         synced = await bot.tree.sync()
         fetch_and_send_tasks.start()
-        await fetch_and_send_tasks.__call__()
         for command in synced:
             logger.info("Command synced: %s", command.name)
     except Exception:
@@ -104,7 +103,9 @@ async def fetch_and_send_tasks() -> None:
                 logger.info("Processing tasks for user: %s", user.email)
 
                 task_list = await get_tasks(
-                    client_session, user.todoist_token, DUE_TODAY & ~Filter(label=label_name)
+                    client_session,
+                    user.todoist_token,
+                    DUE_TODAY & ~Filter(label=label_name),
                 )
 
                 if not user.discord_id:
