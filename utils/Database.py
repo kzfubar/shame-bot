@@ -28,6 +28,15 @@ class User(Base):
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
 
 
+class Score(Base):
+    __tablename__ = "scores"
+    email: Mapped[str] = mapped_column(primary_key=True)
+    streak: Mapped[int] = mapped_column()
+
+    def __repr__(self) -> str:
+        return f"<Score(email={self.email}, streak={self.streak})>"
+
+
 _session_maker: sessionmaker[Session] | None = None
 
 
@@ -103,4 +112,14 @@ def get_user_by_email(session: Session, email: str) -> User | None:
 def get_user_by_todoist_id(session: Session, todoist_id: str) -> User | None:
     return session.execute(
         select(User).where(User.todoist_id == todoist_id)
+    ).scalar_one_or_none()
+
+
+def add_score(session: Session, score: Score) -> None:
+    session.add(score)
+
+
+def get_score_by_email(session: Session, email: str) -> Score | None:
+    return session.execute(
+        select(Score).where(Score.email == email)
     ).scalar_one_or_none()
