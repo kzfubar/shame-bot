@@ -13,7 +13,7 @@ from shame_command import shame
 from todoist.rest import add_label, get_tasks
 from todoist.types import Filter
 from utils.Config import load_config
-from utils.Constants import DUE_TODAY
+from utils.Constants import DUE_TODAY, SHAME_LABEL
 from utils.Database import get_session, get_users
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,9 @@ async def fetch_and_send_tasks() -> None:
                     )
                     continue
 
-                await add_label(client_session, user.todoist_token, task_list, "shame")
+                await add_label(
+                    client_session, user.todoist_token, task_list, SHAME_LABEL
+                )
 
                 task_table = [
                     [

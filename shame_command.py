@@ -6,7 +6,7 @@ import discord
 from log_setup import trace_config
 from todoist.rest import get_tasks
 from todoist.types import Filter
-from utils.Constants import DUE_TODAY
+from utils.Constants import DUE_TODAY, SHAME_LABEL
 from utils.Database import get_session, get_user_by_discord_id
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,8 @@ async def shame(
                 f"{user_to_shame.mention} is not signed up!"
             )
             return
-        # Get the tasks with the "shame" label
-        shame_filter = Filter(label="shame") & DUE_TODAY
+        # Get the tasks with the SHAME_LABEL label
+        shame_filter = Filter(label=SHAME_LABEL) & DUE_TODAY
         shame_tasks = await get_tasks(client_session, user.todoist_token, shame_filter)
 
         if not shame_tasks:
