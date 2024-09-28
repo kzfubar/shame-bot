@@ -55,7 +55,7 @@ async def on_ready() -> None:
     logger.info("Bot is ready. Logged in as %s", bot.user)
     try:
         synced = await bot.tree.sync()
-        await fetch_and_send_tasks()
+        fetch_and_send_tasks.start()
         for command in synced:
             logger.info("Command synced: %s", command.name)
     except Exception:
