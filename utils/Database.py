@@ -26,11 +26,13 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
-    email: Mapped[str] = mapped_column(primary_key=True)
-    score: Mapped["Score"] = relationship(back_populates="user")
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column()
     discord_id: Mapped[int | None] = mapped_column()
     todoist_id: Mapped[str] = mapped_column()
     todoist_token: Mapped[str] = mapped_column()
+
+    score: Mapped["Score"] = relationship(back_populates="user")
 
     def __repr__(self) -> str:
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
@@ -38,13 +40,14 @@ class User(Base):
 
 class Score(Base):
     __tablename__ = "scores"
-    email: Mapped[str] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.email"))
-    user: Mapped["User"] = relationship(back_populates="score")
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     streak: Mapped[int] = mapped_column()
 
+    user: Mapped["User"] = relationship(back_populates="score")
+
     def __repr__(self) -> str:
-        return f"<Score(email={self.email}, streak={self.streak})>"
+        return f"<Score(user_id={self.user_id}, streak={self.streak})>"
 
 
 _session_maker: sessionmaker[Session] | None = None
@@ -122,14 +125,4 @@ def get_user_by_email(session: Session, email: str) -> User | None:
 def get_user_by_todoist_id(session: Session, todoist_id: str) -> User | None:
     return session.execute(
         select(User).where(User.todoist_id == todoist_id)
-    ).scalar_one_or_none()
-
-
-def add_score(session: Session, score: Score) -> None:
-    session.add(score)
-
-
-def get_score_by_email(session: Session, email: str) -> Score | None:
-    return session.execute(
-        select(Score).where(Score.email == email)
     ).scalar_one_or_none()
