@@ -3,8 +3,15 @@ import logging
 from pathlib import Path
 from typing import ParamSpec, Sequence, TypeVar
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy import ForeignKey, create_engine, select
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
     email: Mapped[str] = mapped_column(primary_key=True)
+    score: Mapped["Score"] = relationship(back_populates="user")
     discord_id: Mapped[int | None] = mapped_column()
     todoist_id: Mapped[str] = mapped_column()
     todoist_token: Mapped[str] = mapped_column()
@@ -31,6 +39,8 @@ class User(Base):
 class Score(Base):
     __tablename__ = "scores"
     email: Mapped[str] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.email"))
+    user: Mapped["User"] = relationship(back_populates="score")
     streak: Mapped[int] = mapped_column()
 
     def __repr__(self) -> str:

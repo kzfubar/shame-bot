@@ -116,7 +116,7 @@ async def fetch_and_send_tasks() -> None:
 
                 user_score = get_score_by_email(database_session, user.email)
                 if not user_score:
-                    user_score = Score(email=user.email, streak=0)
+                    user_score = Score(email=user.email, user_id=user.email, streak=0)
                     add_score(database_session, user_score)
 
                 # All tasks completed
@@ -161,7 +161,7 @@ async def fetch_and_send_tasks() -> None:
                 )
 
                 message_content.append(
-                    f"*Tasks for {discord_user.mention}* | Streak: {user_score.streak}\n```\n{table}\n```"
+                    f"*Tasks for {discord_user.mention} | Streak: {user_score.streak}*\n```\n{table}\n```"
                 )
             database_session.commit()
 
