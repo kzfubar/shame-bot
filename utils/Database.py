@@ -96,6 +96,8 @@ def add_discord_to_user(session: Session, email: str, discord_id: int) -> bool:
 
     user.discord_id = discord_id
 
+    session.commit()
+
     return True
 
 
@@ -116,6 +118,7 @@ def discord_id_exists(session: Session, discord_id: int) -> bool:
 
 def add_user(session: Session, user: User) -> None:
     session.add(user)
+    session.commit()
 
 
 def get_user_by_email(session: Session, email: str) -> User | None:
