@@ -8,3 +8,4 @@ requests
 pyright
 sqlalchemy
 pydantic
+alembic

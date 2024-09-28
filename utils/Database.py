@@ -3,8 +3,15 @@ import logging
 from pathlib import Path
 from typing import ParamSpec, Sequence, TypeVar
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy import ForeignKey, create_engine, select
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +26,28 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
-    email: Mapped[str] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column()
     discord_id: Mapped[int | None] = mapped_column()
     todoist_id: Mapped[str] = mapped_column()
     todoist_token: Mapped[str] = mapped_column()
 
+    score: Mapped["Score"] = relationship(back_populates="user")
+
     def __repr__(self) -> str:
         return f"<User(email={self.email}, discord_id={self.discord_id}, todoist_id={self.todoist_id})>"
+
+
+class Score(Base):
+    __tablename__ = "scores"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    streak: Mapped[int] = mapped_column()
+
+    user: Mapped["User"] = relationship(back_populates="score")
+
+    def __repr__(self) -> str:
+        return f"<Score(user_id={self.user_id}, streak={self.streak})>"
 
 
 _session_maker: sessionmaker[Session] | None = None
@@ -74,6 +96,8 @@ def add_discord_to_user(session: Session, email: str, discord_id: int) -> bool:
 
     user.discord_id = discord_id
 
+    session.commit()
+
     return True
 
 
@@ -94,6 +118,7 @@ def discord_id_exists(session: Session, discord_id: int) -> bool:
 
 def add_user(session: Session, user: User) -> None:
     session.add(user)
+    session.commit()
 
 
 def get_user_by_email(session: Session, email: str) -> User | None:

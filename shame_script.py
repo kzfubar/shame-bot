@@ -14,7 +14,7 @@ from todoist.rest import add_label, get_tasks
 from todoist.types import Filter
 from utils.Config import load_config
 from utils.Constants import DUE_TODAY, SHAME_LABEL
-from utils.Database import get_session, get_users
+from utils.Database import Score, get_session, get_users
 
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
@@ -55,7 +55,7 @@ async def on_ready() -> None:
     logger.info("Bot is ready. Logged in as %s", bot.user)
     try:
         synced = await bot.tree.sync()
-        fetch_and_send_tasks.start()
+        await fetch_and_send_tasks()
         for command in synced:
             logger.info("Command synced: %s", command.name)
     except Exception:
@@ -113,12 +113,19 @@ async def fetch_and_send_tasks() -> None:
 
                 discord_user = await bot.fetch_user(user.discord_id)
 
+                if not user.score:
+                    user.score = Score(streak=0)
+
+                # All tasks completed
                 if not task_list:
+                    user.score.streak += 1
                     message_content.append(
-                        f"{discord_user.mention} Completed all tasks"
+                        f"{discord_user.mention} Completed all tasks | Streak: {user.score.streak}"
                     )
                     continue
 
+                # Otherwise, proceed with shaming
+                user.score.streak = 0
                 await add_label(
                     client_session, user.todoist_token, task_list, SHAME_LABEL
                 )
@@ -151,8 +158,9 @@ async def fetch_and_send_tasks() -> None:
                 )
 
                 message_content.append(
-                    f"*Tasks for {discord_user.mention}*\n```\n{table}\n```"
+                    f"*Tasks for {discord_user.mention} | Streak: {user.score.streak}*\n```\n{table}\n```"
                 )
+            database_session.commit()
 
     await paginate_message_send(channel, message_content)
 
