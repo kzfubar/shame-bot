@@ -67,7 +67,7 @@ class Filter:
             filter_items.append(f"@{label}")
 
         if assigned_self:
-            filter_items.append("!(assigned to: others & assigned)")
+            filter_items.append("(!(assigned to: others) & assigned)")
 
         self.filter = " & ".join(filter_items)
 
