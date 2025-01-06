@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, time
+from datetime import datetime
 from typing import List
 
 import aiohttp
@@ -19,7 +19,9 @@ from utils.Database import Score, get_session, get_users
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
 
-SCHEDULED_UTC_POST_TIME = time(hour=2)
+SCHEDULED_UTC_POST_TIME = datetime.strptime(
+    load_config().shame_script.utc_runtime, "%H:%M"
+).time()
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
