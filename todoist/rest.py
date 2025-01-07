@@ -16,7 +16,7 @@ async def get_tasks(
     headers = {"Authorization": f"Bearer {api_token}"}
     url = f"{API_URL}tasks"
 
-    logging.info(str(task_filter))
+    logger.info(str(task_filter))
 
     async with session.get(
         url, headers=headers, params={"filter": str(task_filter)}

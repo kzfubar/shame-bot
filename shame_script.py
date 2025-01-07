@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import List
 
 import aiohttp
 import discord
@@ -66,7 +65,7 @@ async def on_ready() -> None:
 
 async def paginate_message_send(
     channel: discord.TextChannel,
-    message_content: List[str],
+    message_content: list[str],
     max_page: int = DISCORD_MESSAGE_LIMIT,
 ) -> None:
     page_start = 0
