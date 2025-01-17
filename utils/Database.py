@@ -1,7 +1,8 @@
 import configparser
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import ParamSpec, Sequence, TypeVar
+from typing import ParamSpec, TypeVar
 
 from sqlalchemy import ForeignKey, create_engine, select
 from sqlalchemy.orm import (

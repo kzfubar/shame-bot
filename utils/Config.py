@@ -26,9 +26,15 @@ class TodoistConfig:
 
 
 @dataclass
+class ShameScriptConfig:
+    utc_runtime: str
+
+
+@dataclass
 class ConfigValues:
     discord: DiscordConfig
     todoist: TodoistConfig
+    shame_script: ShameScriptConfig
 
 
 _config = None
@@ -62,5 +68,18 @@ def load_config() -> ConfigValues:
         logger.exception("Todoist config set incorrectly")
         sys.exit()
 
-    _config = ConfigValues(discord=discord_config, todoist=todoist_config)
+    try:
+        shame_script_config = ShameScriptConfig(
+            utc_runtime=config.get(
+                section="SHAME_SCRIPT", option="UTC_RUNTIME", fallback="00:00"
+            ),
+        )
+
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        logger.exception("Shame Script config set incorrectly")
+        sys.exit()
+
+    _config = ConfigValues(
+        discord=discord_config, todoist=todoist_config, shame_script=shame_script_config
+    )
     return _config

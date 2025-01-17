@@ -1,6 +1,5 @@
 import logging
-from datetime import datetime, time
-from typing import List
+from datetime import datetime
 
 import aiohttp
 import discord
@@ -19,7 +18,9 @@ from utils.Database import Score, get_session, get_users
 logger = logging.getLogger(__name__)
 logger.info("Bot is starting up...")
 
-SCHEDULED_UTC_POST_TIME = time(hour=2)
+SCHEDULED_UTC_POST_TIME = datetime.strptime(
+    load_config().shame_script.utc_runtime, "%H:%M"
+).time()
 
 TASK_MAX_LENGTH = 70
 INTERVAL_MAX_LENGTH = 20
@@ -64,7 +65,7 @@ async def on_ready() -> None:
 
 async def paginate_message_send(
     channel: discord.TextChannel,
-    message_content: List[str],
+    message_content: list[str],
     max_page: int = DISCORD_MESSAGE_LIMIT,
 ) -> None:
     page_start = 0
