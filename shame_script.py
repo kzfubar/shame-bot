@@ -12,7 +12,7 @@ from shame_command import shame
 from todoist.rest import add_label, get_tasks
 from todoist.types import Filter
 from utils.Config import load_config
-from utils.Constants import DUE_TODAY, SHAME_LABEL
+from utils.Constants import OVERDUE, SHAME_LABEL
 from utils.Database import Score, get_session, get_users
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def fetch_and_send_tasks() -> None:
                 task_list = await get_tasks(
                     client_session,
                     user.todoist_token,
-                    DUE_TODAY & ~Filter(label=label_name),
+                    OVERDUE & ~Filter(label=label_name),
                 )
 
                 if not user.discord_id:
