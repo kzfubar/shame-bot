@@ -2,7 +2,6 @@ import configparser
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import ParamSpec, TypeVar
 
 from sqlalchemy import ForeignKey, create_engine, select
 from sqlalchemy.orm import (
@@ -71,10 +70,6 @@ def load_db() -> sessionmaker[Session]:
     _session_maker = sessionmaker(bind=engine)
 
     return _session_maker
-
-
-T = TypeVar("T")
-P = ParamSpec("P")
 
 
 def get_session() -> Session:
