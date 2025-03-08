@@ -121,7 +121,7 @@ async def fetch_and_send_tasks() -> None:
                 if not task_list:
                     user.score.streak += 1
                     message_content.append(
-                        f"{discord_user.mention} Completed all tasks | Streak: {user.score.streak}"
+                        f"**{discord_user.name}** Completed all tasks | Streak: {user.score.streak}"
                     )
                     continue
 
